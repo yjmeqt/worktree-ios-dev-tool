@@ -4,7 +4,7 @@
 
 **Goal:** Ship a centralized Python CLI `pulse-ios-dev-tool` that absorbs every non-interactive iOS build task for the Pulse app and its local Swift packages, backed by a per-worktree `pulse-ios-build/config.toml`, installed globally via `uv tool install --editable`.
 
-**Architecture:** A Python package `pulse_ios_dev_tool` under `pulse-dev-skills/`, with a layered module design: `cli` dispatches verbs; `config`, `paths` are pure; `simulator`, `xcodebuild`, `packages` build argvs and call through a single `proc` subprocess boundary. State per worktree lives under `pulse-ios-build/` (config + DerivedData). A companion skill `skills/pulse-ios-build/` tells agents when to pick this tool over `xcodebuildmcp-cli`.
+**Architecture:** A Python package `pulse_ios_dev_tool` under `pulse-dev-skills/`, with a layered module design: `cli` dispatches verbs; `config`, `paths` are pure; `simulator`, `xcodebuild`, `packages` build argvs and call through a single `proc` subprocess boundary. State per worktree lives under `pulse-ios-build/` (config + derivedData). A companion skill `skills/pulse-ios-build/` tells agents when to pick this tool over `xcodebuildmcp-cli`.
 
 **Tech Stack:** Python 3.11+ (uses stdlib `tomllib`), `tomlkit` for config writes that preserve formatting, `uv tool install` for distribution, bash shell for smoke checks, `xcrun simctl` + `xcodebuild` as the subprocess targets.
 
@@ -354,8 +354,8 @@ def worktree_root(config_path: Path) -> Path:
 
 
 def derived_data_dir(config_path: Path) -> Path:
-    """Hardcoded `<pulse-ios-build>/DerivedData/`."""
-    return config_dir(config_path) / "DerivedData"
+    """Hardcoded `<pulse-ios-build>/derivedData/`."""
+    return config_dir(config_path) / "derivedData"
 
 
 def find_worktree_root_for_bootstrap(start: Path | None = None) -> Path:
@@ -457,7 +457,7 @@ class PackageOverride:
 class Config:
     config_path: Path                 # absolute path to config.toml
     worktree_root: Path               # directory that contains pulse-ios-build/
-    derived_data: Path                # <pulse-ios-build>/DerivedData
+    derived_data: Path                # <pulse-ios-build>/derivedData
     project: ProjectConfig
     simulator: SimulatorConfig | None
     packages_root: Path               # absolute
@@ -601,7 +601,7 @@ scheme = \"Pulse\"
     assert cfg.project.scheme == 'Pulse'
     assert cfg.simulator is None
     assert cfg.project.configuration == 'Debug'
-    assert cfg.derived_data.name == 'DerivedData'
+    assert cfg.derived_data.name == 'derivedData'
 
     write_simulator(cfg_path, SimulatorConfig(name='X', udid='Y', device='iPhone 17', runtime='iOS 26.0'))
     cfg2 = load(cfg_path)
@@ -1053,7 +1053,7 @@ def run(*, force: bool = False) -> int:
     root = find_worktree_root_for_bootstrap()
     pib = root / "pulse-ios-build"
     cfg_path = pib / "config.toml"
-    derived = pib / "DerivedData"
+    derived = pib / "derivedData"
 
     pib.mkdir(exist_ok=True)
     derived.mkdir(exist_ok=True)
@@ -1100,7 +1100,7 @@ with tempfile.TemporaryDirectory() as td:
     os.chdir(td / 'ios')
     run()
     assert (td / 'pulse-ios-build' / 'config.toml').is_file()
-    assert (td / 'pulse-ios-build' / 'DerivedData').is_dir()
+    assert (td / 'pulse-ios-build' / 'derivedData').is_dir()
     assert 'pulse-ios-build/' in (td / '.gitignore').read_text()
     # idempotent
     run()
@@ -1601,7 +1601,7 @@ pulse-ios-dev-tool boot                   # first run: interactive picker; write
 | `pulse-ios-dev-tool test` | `xcodebuild test` on the main app. Pass `--only-testing <id>` / `--skip-testing <id>` through. |
 | `pulse-ios-dev-tool run` | Build → locate `.app` → `simctl install` → `simctl launch`. Prints the bundle id on success. |
 | `pulse-ios-dev-tool clean` | `xcodebuild clean` on the project. |
-| `pulse-ios-dev-tool wipe-derived` | `rm -rf pulse-ios-build/DerivedData`. Prompts unless `--yes`. |
+| `pulse-ios-dev-tool wipe-derived` | `rm -rf pulse-ios-build/derivedData`. Prompts unless `--yes`. |
 | `pulse-ios-dev-tool test-package <Name>` | Runs `xcodebuild test` against `ios/Packages/<Name>/Package.swift` with the saved simulator destination. |
 | `pulse-ios-dev-tool config` | Prints resolved config as JSON. Use for debugging. |
 | `pulse-ios-dev-tool doctor` | Sanity checks: config, tooling, simulator, project path. Run this first when something's off. |
@@ -1709,7 +1709,7 @@ cd /Users/yi.jiang/Developer/PulseProject/Pulse    # or your chosen worktree
 pulse-ios-dev-tool worktree-bootstrap
 ```
 
-Expected: prints creation of `pulse-ios-build/config.toml`, `pulse-ios-build/DerivedData/`, and an update to `.gitignore`.
+Expected: prints creation of `pulse-ios-build/config.toml`, `pulse-ios-build/derivedData/`, and an update to `.gitignore`.
 
 - [ ] **Step 3: Inspect resolved config**
 
@@ -1741,7 +1741,7 @@ Expected: "All checks passed."
 pulse-ios-dev-tool build -v
 ```
 
-Expected: xcodebuild runs, produces a `Pulse.app` under `pulse-ios-build/DerivedData/Build/Products/Debug-iphonesimulator/`, exits 0. If it fails, fix the underlying issue and re-run — do not paper over errors.
+Expected: xcodebuild runs, produces a `Pulse.app` under `pulse-ios-build/derivedData/Build/Products/Debug-iphonesimulator/`, exits 0. If it fails, fix the underlying issue and re-run — do not paper over errors.
 
 - [ ] **Step 7: Run on simulator**
 
@@ -1832,7 +1832,7 @@ git commit -m "docs(readme): add pulse-ios-dev-tool install + link to pulse-ios-
 ## Done criteria
 
 1. `pulse-ios-dev-tool` on `PATH` after a fresh `uv tool install --editable`.
-2. `pulse-ios-dev-tool worktree-bootstrap` creates `pulse-ios-build/{config.toml, DerivedData/}`, updates `.gitignore`, and is idempotent.
+2. `pulse-ios-dev-tool worktree-bootstrap` creates `pulse-ios-build/{config.toml, derivedData/}`, updates `.gitignore`, and is idempotent.
 3. `pulse-ios-dev-tool boot` first-run picks device + runtime, creates a `Pulse-<worktree>` sim, writes `[simulator]`, and opens Simulator.app. Subsequent runs just boot.
 4. `pulse-ios-dev-tool build / test / run / clean / wipe-derived / test-package <Name> / config / doctor` all work against a real Pulse worktree.
 5. `skills/pulse-ios-build/SKILL.md` documents the verb list and the decision boundary with `xcodebuildmcp-cli`.
