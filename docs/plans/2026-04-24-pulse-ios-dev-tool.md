@@ -1,7 +1,5 @@
 # `pulse-ios-dev-tool` Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Ship a centralized Python CLI `pulse-ios-dev-tool` that absorbs every non-interactive iOS build task for the Pulse app and its local Swift packages, backed by a per-worktree `pulse-ios-build/config.toml`, installed globally via `uv tool install --editable`.
 
 **Architecture:** A Python package `pulse_ios_dev_tool` under `pulse-dev-skills/`, with a layered module design: `cli` dispatches verbs; `config`, `paths` are pure; `simulator`, `xcodebuild`, `packages` build argvs and call through a single `proc` subprocess boundary. State per worktree lives under `pulse-ios-build/` (config + derivedData). A companion skill `skills/pulse-ios-build/` tells agents when to pick this tool over `xcodebuildmcp-cli`.
@@ -1829,6 +1827,85 @@ git commit -m "docs(readme): add pulse-ios-dev-tool install + link to pulse-ios-
 
 ---
 
+## Task 17: Optional `xcbeautify` pretty-output integration
+
+Added after initial rollout. Wires `mint run xcbeautify` into `proc.py`'s
+`xcodebuild` streaming path and teaches `doctor` to report it, without making
+`mint` a required dependency.
+
+**Files:**
+- Modify: `pulse_ios_dev_tool/src/pulse_ios_dev_tool/proc.py`
+- Modify: `pulse_ios_dev_tool/src/pulse_ios_dev_tool/cli.py` (the `doctor` handler)
+- Modify: `pulse_ios_dev_tool/README.md`
+- Modify: `docs/specs/2026-04-24-pulse-ios-build-system.md` (doctor row, new "Pretty xcodebuild output" section, install-setup note)
+- Modify: `skills/pulse-ios-build/SKILL.md` (doctor row, install-setup note)
+
+- [x] **Step 1: Add `_run_xcodebuild_pretty` helper in `proc.py`**
+
+  - Spawns `mint run xcbeautify` with `stdin=PIPE`.
+  - Spawns `xcodebuild` with `stdout=xcb.stdin`, `stderr=STDOUT`.
+  - Closes the local copy of `xcb.stdin` so `xcbeautify` sees EOF when
+    `xcodebuild` exits.
+  - Waits for both; returns `xcodebuild`'s exit code (ignores xcbeautify's).
+
+- [x] **Step 2: Gate the pretty path inside `proc.run`**
+
+  - Only when `capture=False`, `argv[0] == "xcodebuild"`, and
+    `shutil.which("mint") is not None`.
+  - Raises `SubprocessError` on non-zero `xcodebuild` return, same as the
+    plain path.
+  - When mint is missing, emit a one-line note to stderr suggesting
+    `brew install mint`; do not fail the build.
+  - Captured-output paths (`capture=True`) continue to use `subprocess.run`
+    unchanged so parsing stays deterministic.
+
+- [x] **Step 3: Extend `doctor`**
+
+  - After existing `xcodebuild` / `xcrun` reports, also check
+    `shutil.which("mint")`.
+  - Present → `mint: <path>`.
+  - Missing → `mint: not installed (optional — enables xcbeautify for
+    prettier xcodebuild output).`
+  - A missing `mint` is informational only; it must not change the exit
+    code.
+
+- [x] **Step 4: Update docs**
+
+  - `pulse_ios_dev_tool/README.md` — short note under the install
+    instructions.
+  - `docs/specs/2026-04-24-pulse-ios-build-system.md` — update `doctor`
+    row, add **Pretty xcodebuild output** section before the `config.toml`
+    schema, add an "optional" line under **One-time machine setup**.
+  - `skills/pulse-ios-build/SKILL.md` — add an "optional" line under
+    **One-time machine setup** and extend the `doctor` row.
+
+- [ ] **Step 5: Smoke check**
+
+  ```bash
+  # With mint installed
+  pulse-ios-dev-tool doctor                    # expect: mint: /opt/homebrew/bin/mint
+  pulse-ios-dev-tool build                     # expect: prettified output
+
+  # With mint uninstalled
+  brew unlink mint                              # or use a shell with mint off PATH
+  pulse-ios-dev-tool doctor                    # expect: mint: not installed (optional — ...)
+  pulse-ios-dev-tool build                     # expect: raw xcodebuild output; one-line stderr note
+  ```
+
+- [ ] **Step 6: Commit**
+
+  ```bash
+  git add pulse_ios_dev_tool/src/pulse_ios_dev_tool/proc.py \
+          pulse_ios_dev_tool/src/pulse_ios_dev_tool/cli.py \
+          pulse_ios_dev_tool/README.md \
+          docs/specs/2026-04-24-pulse-ios-build-system.md \
+          skills/pulse-ios-build/SKILL.md \
+          docs/plans/2026-04-24-pulse-ios-dev-tool.md
+  git commit -m "feat(pulse-ios-dev-tool): optional xcbeautify pretty output via mint"
+  ```
+
+---
+
 ## Done criteria
 
 1. `pulse-ios-dev-tool` on `PATH` after a fresh `uv tool install --editable`.
@@ -1838,3 +1915,4 @@ git commit -m "docs(readme): add pulse-ios-dev-tool install + link to pulse-ios-
 5. `skills/pulse-ios-build/SKILL.md` documents the verb list and the decision boundary with `xcodebuildmcp-cli`.
 6. `skills/pulse-ios-testing/SKILL.md` points at the new skill.
 7. Repo README mentions the CLI and links to the skill.
+8. With `mint` on `PATH`, `xcodebuild`-emitting verbs stream through `xcbeautify`; without it, output is raw plus a one-line stderr install hint. `doctor` reports mint status either way.
