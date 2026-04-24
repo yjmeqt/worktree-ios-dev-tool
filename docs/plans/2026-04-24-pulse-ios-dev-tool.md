@@ -1751,19 +1751,31 @@ pulse-ios-dev-tool run
 
 Expected: "bundle_id = com.applovin.Pulse" (or the project's actual bundle id), app launches on the booted sim.
 
-- [ ] **Step 8: Test one local package**
+- [ ] **Step 8: Main-app tests**
+
+```bash
+pulse-ios-dev-tool test -v
+```
+
+Expected: xcodebuild test runs against the main `Pulse` scheme, exits 0 (or failing tests surface verbatim). This is slow — several minutes on a full run. For a fast dry-run, scope it:
+
+```bash
+pulse-ios-dev-tool test --only-testing PulseTests/SomeFastSuite -v
+```
+
+- [ ] **Step 9: Test one local package**
 
 ```bash
 pulse-ios-dev-tool test-package PulseNetworking
 ```
 
-Expected: xcodebuild test run against `ios/Packages/PulseNetworking/Package.swift`, exits 0 (or failing tests surface verbatim).
+Expected: xcodebuild test runs against `ios/Packages/PulseNetworking/Package.swift`, exits 0 (or failing tests surface verbatim).
 
-- [ ] **Step 9: Record the smoke-check outcome in the commit log**
+- [ ] **Step 10: Record the smoke-check outcome in the commit log**
 
 ```bash
 cd <skills-repo>
-git commit --allow-empty -m "chore(pulse-ios-dev-tool): end-to-end smoke check passed (bootstrap/boot/build/run/test-package)"
+git commit --allow-empty -m "chore(pulse-ios-dev-tool): end-to-end smoke check passed (bootstrap/boot/build/run/test/test-package)"
 ```
 
 ---
