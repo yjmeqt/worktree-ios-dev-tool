@@ -34,6 +34,19 @@ worktree-ios-dev-tool bootstrap     # creates worktree-ios-dev/, seeds config.to
 worktree-ios-dev-tool boot          # first run: interactive picker; writes [simulator] to config.toml
 ```
 
+## Agent (non-interactive) usage
+
+`bootstrap` detects a non-TTY environment automatically, but still requires `--project` and `--scheme` to be explicit — otherwise it errors on ambiguity. Always pass `--yes` as well to suppress any remaining prompts:
+
+```bash
+worktree-ios-dev-tool bootstrap \
+  --project ios/Pulse.xcodeproj \
+  --scheme Pulse \
+  --yes
+```
+
+`boot` picks the simulator non-interactively when stdin is not a TTY; pass `--all-devices` if the default iPhone 17 Pro filter is too narrow. All other verbs (`build`, `test`, `run`, `clean`, etc.) are already non-interactive by design.
+
 ## Verb reference
 
 | Verb | Use for |
