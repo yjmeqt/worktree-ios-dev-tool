@@ -16,7 +16,7 @@ Use `worktree-ios-dev-tool` for every non-interactive iOS build task. Keep `xcod
 ## One-time machine setup
 
 ```bash
-uv tool install --editable /abs/path/to/pulse-dev-skills/worktree_ios_dev
+uv tool install --editable /abs/path/to/pulse-dev-skills/worktree_ios_dev_tool
 ```
 
 Requires `uv` on `PATH` and `~/.local/bin` on `PATH`.

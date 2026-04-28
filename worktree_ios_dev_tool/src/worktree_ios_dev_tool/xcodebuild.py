@@ -1,0 +1,57 @@
+"""Pure argv builders for xcodebuild. No subprocess calls."""
+from __future__ import annotations
+
+from typing import Sequence
+
+from .config import Config, SimulatorConfig, require_simulator
+
+
+def _destination(sim: SimulatorConfig) -> str:
+    return f"platform=iOS Simulator,id={sim.udid}"
+
+
+def _common(cfg: Config, sim: SimulatorConfig | None, *, release: bool) -> list[str]:
+    configuration = "Release" if release else cfg.project.configuration
+    argv: list[str] = [
+        "xcodebuild",
+        "-project", str(cfg.project.path),
+        "-scheme", cfg.project.scheme,
+        "-configuration", configuration,
+        "-derivedDataPath", str(cfg.derived_data),
+    ]
+    if sim is not None:
+        argv += ["-destination", _destination(sim)]
+    argv += cfg.extras_xcodebuild_flags
+    return argv
+
+
+def build_argv(cfg: Config, *, release: bool = False, scheme_override: str | None = None) -> list[str]:
+    sim = require_simulator(cfg)
+    argv = _common(cfg, sim, release=release)
+    if scheme_override:
+        argv[argv.index("-scheme") + 1] = scheme_override
+    return argv + ["build"]
+
+
+def test_argv(
+    cfg: Config,
+    *,
+    release: bool = False,
+    scheme_override: str | None = None,
+    only_testing: Sequence[str] = (),
+    skip_testing: Sequence[str] = (),
+) -> list[str]:
+    sim = require_simulator(cfg)
+    argv = _common(cfg, sim, release=release) + ["test"]
+    if scheme_override:
+        argv[argv.index("-scheme") + 1] = scheme_override
+    for t in only_testing:
+        argv += ["-only-testing", t]
+    for t in skip_testing:
+        argv += ["-skip-testing", t]
+    return argv
+
+
+def clean_argv(cfg: Config) -> list[str]:
+    # clean doesn't need a destination.
+    return _common(cfg, None, release=False) + ["clean"]
