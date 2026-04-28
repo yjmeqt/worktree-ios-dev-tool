@@ -1,3 +1,5 @@
+> **Superseded by:** `docs/superpowers/plans/2026-04-28-worktree-ios-dev.md`
+
 # `pulse-ios-dev-tool` Implementation Plan
 
 **Goal:** Ship a centralized Python CLI `pulse-ios-dev-tool` that absorbs every non-interactive iOS build task for the Pulse app and its local Swift packages, backed by a per-worktree `pulse-ios-dev/config.toml`, installed globally via `uv tool install --editable`.

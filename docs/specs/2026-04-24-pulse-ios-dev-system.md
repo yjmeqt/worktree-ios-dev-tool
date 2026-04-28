@@ -1,3 +1,5 @@
+> **Superseded by:** `docs/superpowers/specs/2026-04-28-worktree-ios-dev-design.md`
+
 # Pulse iOS Dev Management System
 
 **Status:** Draft · **Date:** 2026-04-24
