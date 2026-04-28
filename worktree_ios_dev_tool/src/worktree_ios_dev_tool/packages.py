@@ -3,8 +3,9 @@
 Default convention:
 
     cd ios/Packages/<Name> && xcodebuild test \
-        -project Package.swift \
         -scheme <Name>
+
+xcodebuild auto-discovers Package.swift from CWD — do not pass -project.
 
 Overrides from [packages.<Name>] in config.toml merge over the convention.
 """
@@ -32,7 +33,6 @@ def resolve(cfg: Config, package_name: str) -> tuple[list[str], Path]:
     argv = [
         "xcodebuild",
         "test",
-        "-project", "Package.swift",
         "-scheme", scheme,
         "-destination", f"platform=iOS Simulator,id={sim.udid}",
         "-derivedDataPath", str(cfg.derived_data),
