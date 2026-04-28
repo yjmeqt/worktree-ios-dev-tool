@@ -35,6 +35,23 @@ worktree-ios-dev-tool boot        # create and boot the per-worktree simulator
 
 `bootstrap` discovers the Xcode project and scheme interactively, then writes `worktree-ios-dev/config.toml`. `boot` creates a simulator named `<simulator_prefix>-<sanitized-branch>-iPhone17Pro` and boots it.
 
+Interactive output uses a clack-style step format:
+
+```
+◇  Project: ios/Pulse.xcodeproj
+⠋  Fetching schemes...
+◇  Scheme: Pulse
+│
+◆  worktree-ios-dev/config.toml written
+│  project          = ios/Pulse.xcodeproj
+│  scheme           = Pulse
+│  simulator_prefix = Pulse
+│
+◆  Next: worktree-ios-dev-tool boot
+```
+
+Non-interactive (agent / non-TTY) output uses flat `[worktree-ios-dev-tool] <msg>` lines instead.
+
 ## Verb reference
 
 | Verb | Description |
@@ -66,7 +83,9 @@ worktree-ios-dev-tool boot        # create and boot the per-worktree simulator
 
 ## Agent (non-interactive) usage
 
-The tool detects a non-TTY environment automatically. For `bootstrap`, you must still supply `--project` and `--scheme` explicitly — without them, ambiguity causes an immediate error exit. Always add `--yes` to suppress any remaining prompts:
+The tool detects a non-TTY environment automatically and switches to flat `[worktree-ios-dev-tool] <msg>` output instead of the clack-style step format.
+
+For `bootstrap`, supply `--project` and `--scheme` explicitly — without them, ambiguity causes an immediate error exit. Add `--yes` to suppress any remaining prompts:
 
 ```bash
 worktree-ios-dev-tool bootstrap \
@@ -75,7 +94,7 @@ worktree-ios-dev-tool bootstrap \
   --yes
 ```
 
-All other verbs (`build`, `test`, `run`, `clean`, etc.) are non-interactive by design.
+All other verbs (`build`, `test`, `run`, `clean`, etc.) are non-interactive by design — no extra flags needed.
 
 ## Why is `bootstrap` slow the first time?
 

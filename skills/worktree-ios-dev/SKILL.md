@@ -36,7 +36,7 @@ worktree-ios-dev-tool boot          # first run: interactive picker; writes [sim
 
 ## Agent (non-interactive) usage
 
-`bootstrap` detects a non-TTY environment automatically, but still requires `--project` and `--scheme` to be explicit — otherwise it errors on ambiguity. Always pass `--yes` as well to suppress any remaining prompts:
+When stdin is not a TTY the tool switches automatically to flat `[worktree-ios-dev-tool] <msg>` output (no ◇/◆ step markers). For `bootstrap`, supply `--project` and `--scheme` explicitly and add `--yes` to suppress any remaining prompts:
 
 ```bash
 worktree-ios-dev-tool bootstrap \
