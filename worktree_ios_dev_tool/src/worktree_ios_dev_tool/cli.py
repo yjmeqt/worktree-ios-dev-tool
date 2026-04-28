@@ -8,7 +8,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import bootstrap, config as config_mod, packages as packages_mod, simulator as sim_mod, xcodebuild
+from . import bootstrap, config as config_mod, packages as packages_mod, simulator as sim_mod, ui, xcodebuild
 from .errors import EnvError, WorktreeIosError
 from .paths import find_config
 from .proc import run
@@ -112,8 +112,10 @@ def _cmd_config(args: argparse.Namespace) -> int:
 
 def _cmd_clean(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
+    ui.step("Cleaning…")
     argv = xcodebuild.clean_argv(cfg)
     run(argv, verbose=args.verbose)
+    ui.done("Clean succeeded.")
     return 0
 
 
@@ -121,16 +123,16 @@ def _cmd_wipe_derived(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     target = cfg.derived_data
     if not target.exists():
-        print(f"Nothing to wipe: {target} does not exist.")
+        ui.done(f"Nothing to wipe — {target} does not exist.")
         return 0
     if not args.yes:
-        resp = input(f"Delete {target}? [y/N] ").strip().lower()
+        resp = input(f"◇  Delete {target}? [y/N] ").strip().lower()
         if resp not in ("y", "yes"):
-            print("Aborted.")
+            ui.done("Aborted.")
             return 1
     shutil.rmtree(target)
     target.mkdir()
-    print(f"Wiped {target}.")
+    ui.done(f"Wiped {target}.")
     return 0
 
 
@@ -141,13 +143,20 @@ def _cmd_boot(args: argparse.Namespace) -> int:
 
 def _cmd_build(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
+    scheme = args.scheme or cfg.project.scheme
+    config = "Release" if args.release else cfg.project.configuration
+    ui.step(f"Building {scheme} ({config})…")
     argv = xcodebuild.build_argv(cfg, release=args.release, scheme_override=args.scheme)
     run(argv, verbose=args.verbose)
+    ui.done("Build succeeded.")
     return 0
 
 
 def _cmd_test(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
+    scheme = args.scheme or cfg.project.scheme
+    config = "Release" if args.release else cfg.project.configuration
+    ui.step(f"Testing {scheme} ({config})…")
     argv = xcodebuild.test_argv(
         cfg,
         release=args.release,
@@ -156,6 +165,7 @@ def _cmd_test(args: argparse.Namespace) -> int:
         skip_testing=args.skip_testing,
     )
     run(argv, verbose=args.verbose)
+    ui.done("Tests passed.")
     return 0
 
 
@@ -166,56 +176,69 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 def _cmd_test_package(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
+    ui.step(f"Testing package {args.name}…")
     argv, cwd = packages_mod.resolve(cfg, args.name)
     run(argv, cwd=cwd, verbose=args.verbose)
+    ui.done(f"Tests passed — {args.name}.")
     return 0
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     problems: list[str] = []
+
     try:
         cfg = _load_config(args)
-        print(f"config.toml: {cfg.config_path}")
+        ui.step(f"config.toml    {cfg.config_path}")
     except EnvError as e:
+        ui.problem(f"config.toml    {e}")
         problems.append(str(e))
         cfg = None
 
     for binary in ("xcodebuild", "xcrun"):
-        if shutil.which(binary) is None:
+        path = shutil.which(binary)
+        if path is None:
+            ui.problem(f"{binary:<14} not on PATH")
             problems.append(f"`{binary}` not on PATH.")
         else:
-            print(f"{binary}: {shutil.which(binary)}")
+            ui.step(f"{binary:<14} {path}")
 
     mint_path = shutil.which("mint")
     if mint_path is None:
-        print("mint: not installed (optional — enables xcbeautify for prettier xcodebuild output).")
+        ui.warn("mint           not installed (optional — enables xcbeautify)")
     else:
-        print(f"mint: {mint_path}")
+        ui.step(f"mint           {mint_path}")
 
     if cfg is not None:
         if not cfg.project.path.exists():
+            ui.problem(f"project        not found: {cfg.project.path}")
             problems.append(f"project.path does not exist: {cfg.project.path}")
         else:
-            print(f"project: {cfg.project.path}")
+            ui.step(f"project        {cfg.project.path}")
+
         if cfg.simulator is None:
+            ui.problem("simulator      no [simulator] block — run `worktree-ios-dev-tool boot`")
             problems.append("No [simulator] block. Run `worktree-ios-dev-tool boot`.")
         else:
             dev = sim_mod.find_device_by_udid(cfg.simulator.udid)
             if dev is None:
+                ui.problem(f"simulator      UDID not found: {cfg.simulator.udid}")
                 problems.append(f"Simulator UDID not found in simctl list: {cfg.simulator.udid}")
             else:
-                print(f"simulator: {cfg.simulator.name} ({cfg.simulator.udid}) — state={dev.get('state')}")
+                state = dev.get("state", "?")
+                ui.step(f"simulator      {cfg.simulator.name} ({cfg.simulator.udid})  state={state}")
+
         if not cfg.derived_data.parent.exists():
+            ui.problem(f"worktree-ios-dev/  missing: {cfg.derived_data.parent}")
             problems.append(f"worktree-ios-dev/ missing: {cfg.derived_data.parent}")
 
+    ui.sep()
     if problems:
-        print()
-        print("Problems:")
+        ui.done(f"{len(problems)} problem(s) found.")
         for p in problems:
-            print(f"  - {p}")
+            ui.info(f"- {p}")
         return 1
-    print()
-    print("All checks passed.")
+
+    ui.done("All checks passed.")
     return 0
 
 

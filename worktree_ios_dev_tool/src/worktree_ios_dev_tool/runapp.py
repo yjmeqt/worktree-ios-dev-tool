@@ -5,7 +5,7 @@ import argparse
 import plistlib
 from pathlib import Path
 
-from . import simulator as sim_mod, xcodebuild
+from . import simulator as sim_mod, ui, xcodebuild
 from .config import load, require_simulator
 from .errors import UserError
 from .paths import find_config
@@ -44,6 +44,7 @@ def run(args: argparse.Namespace) -> int:
     sim = require_simulator(cfg)
 
     # 1. Build
+    ui.step("Building…")
     argv = xcodebuild.build_argv(cfg, release=args.release)
     proc_run(argv, verbose=args.verbose)
 
@@ -53,9 +54,14 @@ def run(args: argparse.Namespace) -> int:
     bundle_id = _bundle_id(app_path)
 
     # 3. Boot sim if needed, install, launch.
+    ui.step("Installing…")
     sim_mod.boot(sim.udid)
     proc_run(["xcrun", "simctl", "install", sim.udid, str(app_path)], verbose=args.verbose)
+
+    ui.step("Launching…")
     result = proc_run(["xcrun", "simctl", "launch", sim.udid, bundle_id], capture=True, verbose=args.verbose)
-    print(result.stdout.strip())
-    print(f"bundle_id = {bundle_id}")
+    ui.sep()
+    ui.done(f"Launched  {bundle_id}")
+    ui.info(result.stdout.strip())
+
     return 0

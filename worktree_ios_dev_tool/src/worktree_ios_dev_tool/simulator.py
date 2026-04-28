@@ -9,6 +9,7 @@ import re
 import sys
 from dataclasses import dataclass
 
+from . import ui
 from .config import SimulatorConfig
 from .errors import EnvError, UserError
 from .proc import require, run, run_json
@@ -93,8 +94,9 @@ def boot(udid: str) -> None:
     if dev is None:
         raise UserError(f"No simulator with UDID {udid}.")
     if dev.get("state") == "Booted":
-        print(f"Simulator {udid} already booted.")
+        ui.step(f"Simulator already booted ({udid}).")
         return
+    ui.step("Booting simulator…")
     run(["xcrun", "simctl", "boot", udid])
     run(["open", "-a", "Simulator"])
 

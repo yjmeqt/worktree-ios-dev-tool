@@ -1,3 +1,4 @@
+# worktree_ios_dev_tool/src/worktree_ios_dev_tool/bootstrap.py
 """Implementation of the `bootstrap` verb."""
 from __future__ import annotations
 
@@ -6,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import ui
 from .errors import UserError
 from .paths import find_worktree_root_for_bootstrap
 
@@ -120,18 +122,14 @@ def _write_config(
     cfg_path.write_text(tomlkit.dumps(doc))
 
 
-def _log(msg: str) -> None:
-    print(f"[worktree-ios-dev-tool] {msg}")
-
-
 def run(*, project: str | None, scheme: str | None, yes: bool, force: bool) -> int:
     root = find_worktree_root_for_bootstrap()
     pid = root / "worktree-ios-dev"
     cfg_path = pid / "config.toml"
-    is_interactive = sys.stdin.isatty() and sys.stdout.isatty() and not yes
+    interactive = ui.is_interactive() and not yes
 
     if cfg_path.exists() and not force:
-        print(f"worktree-ios-dev already bootstrapped at {pid} (use --force to re-seed).")
+        ui.done(f"Already bootstrapped at {pid} (use --force to re-seed).")
         return 0
 
     # ── Discover xcodeproj ──────────────────────────────────────────────────
@@ -146,19 +144,9 @@ def run(*, project: str | None, scheme: str | None, yes: bool, force: bool) -> i
                 f"--project path must be inside the worktree root ({root}). "
                 f"Got: {xcodeproj}"
             )
-        if not is_interactive:
-            _log(f"using project: {project}")
+        ui.step(f"Project: {project}")
     else:
-        if is_interactive:
-            try:
-                from rich.progress import Progress, SpinnerColumn, TextColumn
-                with Progress(SpinnerColumn(), TextColumn("{task.description}"), transient=True) as p:
-                    p.add_task("Scanning for Xcode projects...")
-                    projs = find_xcodeprojs(root)
-            except ImportError:
-                projs = find_xcodeprojs(root)
-        else:
-            _log("scanning for Xcode projects...")
+        with ui.spinner("Scanning for Xcode projects..."):
             projs = find_xcodeprojs(root)
 
         if not projs:
@@ -167,54 +155,30 @@ def run(*, project: str | None, scheme: str | None, yes: bool, force: bool) -> i
         rel_projs = [str(p.relative_to(root)) for p in projs]
         chosen_rel = _pick_one("project", rel_projs, yes)
         xcodeproj = (root / chosen_rel).resolve()
-
-        if is_interactive and len(projs) == 1:
-            print(f"✓ project: {chosen_rel}")
-        elif not is_interactive:
-            _log(f"found project: {chosen_rel}")
+        ui.step(f"Project: {chosen_rel}")
 
     # ── Discover scheme ─────────────────────────────────────────────────────
     if scheme:
         chosen_scheme = scheme
-        if not is_interactive:
-            _log(f"using scheme: {chosen_scheme}")
+        ui.step(f"Scheme: {chosen_scheme}")
     else:
-        if is_interactive:
-            try:
-                from rich.progress import Progress, SpinnerColumn, TextColumn
-                with Progress(SpinnerColumn(), TextColumn("{task.description}"), transient=True) as p:
-                    p.add_task("Fetching schemes...")
-                    schemes = fetch_schemes(xcodeproj)
-            except ImportError:
-                schemes = fetch_schemes(xcodeproj)
-        else:
-            _log("fetching schemes...")
+        with ui.spinner("Fetching schemes..."):
             schemes = fetch_schemes(xcodeproj)
 
         if not schemes:
             raise UserError(f"No schemes found in {xcodeproj}. Pass --scheme <name>.")
 
         chosen_scheme = _pick_one("scheme", schemes, yes)
-
-        if is_interactive and len(schemes) == 1:
-            print(f"✓ scheme: {chosen_scheme}")
-        elif not is_interactive:
-            _log(f"found scheme: {chosen_scheme}")
+        ui.step(f"Scheme: {chosen_scheme}")
 
     # ── packages_root ───────────────────────────────────────────────────────
     pkg_root = detect_packages_root(xcodeproj)
     if pkg_root:
-        if is_interactive:
-            print(f"✓ packages_root detected: {pkg_root.relative_to(root)}")
-        else:
-            _log(f"packages_root: {pkg_root.relative_to(root)}")
-    else:
-        if not is_interactive:
-            _log("packages_root: not found (optional)")
+        ui.step(f"Packages root: {pkg_root.relative_to(root)}")
 
     # ── simulator_prefix ────────────────────────────────────────────────────
     sim_prefix = chosen_scheme
-    if is_interactive:
+    if interactive:
         try:
             from InquirerPy import inquirer
             result = inquirer.text(
@@ -234,26 +198,14 @@ def run(*, project: str | None, scheme: str | None, yes: bool, force: bool) -> i
     _write_config(cfg_path, xcodeproj, root, chosen_scheme, sim_prefix, pkg_root)
     _ensure_gitignored(root)
 
-    if is_interactive:
-        try:
-            from rich.console import Console
-            from rich.panel import Panel
-            console = Console()
-            lines = [
-                "[project]",
-                f"path             = {xcodeproj.relative_to(root)}",
-                f"scheme           = {chosen_scheme}",
-                f"simulator_prefix = {sim_prefix}",
-            ]
-            if pkg_root:
-                lines += ["[packages_root]", f"path             = {pkg_root.relative_to(root)}"]
-            console.print(Panel("\n".join(lines), title="worktree-ios-dev/config.toml", expand=False))
-            console.print("[green]✓[/green] Created worktree-ios-dev/config.toml")
-            console.print("[green]✓[/green] Updated .gitignore")
-            console.print("[blue]→[/blue] Next: worktree-ios-dev-tool boot")
-        except ImportError:
-            print(f"Created {cfg_path}")
-    else:
-        _log("bootstrap complete")
+    ui.sep()
+    ui.done("worktree-ios-dev/config.toml written")
+    ui.info(f"project          = {xcodeproj.relative_to(root)}")
+    ui.info(f"scheme           = {chosen_scheme}")
+    ui.info(f"simulator_prefix = {sim_prefix}")
+    if pkg_root:
+        ui.info(f"packages_root    = {pkg_root.relative_to(root)}")
+    ui.sep()
+    ui.done("Next: worktree-ios-dev-tool boot")
 
     return 0
