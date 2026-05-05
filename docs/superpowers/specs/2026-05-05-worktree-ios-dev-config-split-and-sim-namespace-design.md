@@ -304,6 +304,19 @@ All in scope of this change:
 
 Search for stale references to `bootstrap`, `boot --recreate`, `config.toml` (singular) before merging. Acceptance: `rg -nP '\b(bootstrap|boot --recreate|config\.toml)\b' worktree_ios_dev_tool/ skills/ docs/ README.md` returns only intentional historical mentions (e.g., this spec).
 
+## Documentation Conventions
+
+The implementation must be well-commented and well-documented. Concretely:
+
+- **Module headers** — every `.py` file starts with a one-line `# path/to/file.py` comment plus a module docstring stating its responsibility, matching the existing style in `config.py`, `paths.py`, etc.
+- **Public function docstrings** — every public (non-`_`-prefixed) function and dataclass gets a docstring covering: purpose, parameters that aren't self-evident, return shape, and any errors raised. Internal helpers get a one-liner if their name doesn't already explain them.
+- **Algorithmic comments** — non-obvious logic gets an inline comment explaining *why*, not *what*. Specifically required for: name-parsing in `sim prune` (the `rpartition` choice + label rule rationale), the single/multi `resolve_sim` rules, the legacy `config.toml` rejection path, and any subprocess invocation whose flags aren't self-evident.
+- **CLI help strings** — every argparse parser/sub-parser/argument has a `help=` string that reads like a user-facing one-liner, not a code label.
+- **Error messages** — every `UserError` / `EnvError` includes an actionable next step (which command to run, which file to edit). Existing errors already do this; new code matches the pattern.
+- **Examples in docstrings** — public TOML loaders include a minimal example block in their docstring so a reader doesn't have to grep the test fixtures.
+
+This preference applies to every file touched by this change, not just net-new modules.
+
 ## Tests
 
 Existing tests under `worktree_ios_dev_tool/tests/` get adapted; key new cases:
