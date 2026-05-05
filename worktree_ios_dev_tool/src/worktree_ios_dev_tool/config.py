@@ -22,11 +22,25 @@ class ProjectConfig:
 
 
 @dataclass(frozen=True)
-class SimulatorConfig:
+class SimulatorEntry:
+    """One configured simulator under [simulators.<label>] in simulator.toml.
+
+    Attributes:
+        name:    The simctl device name. Always synthesized as
+                 ``<simulator_prefix>-<worktree_basename>-<label>``; never hand-edit.
+        udid:    The simctl-assigned UUID; the source of truth for routing
+                 build/test/run destinations.
+        device:  Apple device-type display name (e.g. "iPhone 17 Pro").
+        runtime: Apple runtime display name (e.g. "iOS 18.2").
+    """
     name: str
     udid: str
     device: str
     runtime: str
+
+
+# Temporary alias for backward compatibility; to be removed in a later task.
+SimulatorConfig = SimulatorEntry
 
 
 @dataclass(frozen=True)
@@ -40,7 +54,7 @@ class Config:
     worktree_root: Path
     derived_data: Path
     project: ProjectConfig
-    simulator: SimulatorConfig | None
+    simulator: SimulatorEntry | None
     packages_root: Path
     package_overrides: dict[str, PackageOverride] = field(default_factory=dict)
     extras_xcodebuild_flags: list[str] = field(default_factory=list)
@@ -88,14 +102,14 @@ def load(config_path: Path) -> Config:
         simulator_prefix=proj.get("simulator_prefix") or None,
     )
 
-    simulator: SimulatorConfig | None = None
+    simulator: SimulatorEntry | None = None
     if "simulator" in data:
         sim = data["simulator"]
         _require_keys("simulator", sim, _ALLOWED_SIMULATOR)
         for key in _ALLOWED_SIMULATOR:
             if key not in sim:
                 raise UserError(f"[simulator] missing `{key}` in {config_path}.")
-        simulator = SimulatorConfig(
+        simulator = SimulatorEntry(
             name=sim["name"],
             udid=sim["udid"],
             device=sim["device"],
@@ -131,7 +145,7 @@ def load(config_path: Path) -> Config:
     )
 
 
-def require_simulator(cfg: Config) -> SimulatorConfig:
+def require_simulator(cfg: Config) -> SimulatorEntry:
     if cfg.simulator is None:
         raise UserError(
             "No [simulator] block in config.toml. "
@@ -140,7 +154,7 @@ def require_simulator(cfg: Config) -> SimulatorConfig:
     return cfg.simulator
 
 
-def write_simulator(config_path: Path, sim: SimulatorConfig) -> None:
+def write_simulator(config_path: Path, sim: SimulatorEntry) -> None:
     """Rewrite the [simulator] block in-place using tomlkit to preserve comments."""
     text = config_path.read_text()
     doc = tomlkit.parse(text)

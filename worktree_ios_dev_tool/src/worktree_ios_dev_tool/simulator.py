@@ -10,7 +10,7 @@ import sys
 from dataclasses import dataclass
 
 from . import ui
-from .config import SimulatorConfig
+from .config import SimulatorEntry
 from .errors import EnvError, UserError
 from .proc import require, run, run_json
 
@@ -151,5 +151,5 @@ def pick_device_and_runtime(*, iphone_17_only: bool) -> tuple[DeviceType, Runtim
     return device, runtime
 
 
-def to_config(name: str, udid: str, device: DeviceType, runtime: Runtime) -> SimulatorConfig:
-    return SimulatorConfig(name=name, udid=udid, device=device.name, runtime=runtime.name)
+def to_config(name: str, udid: str, device: DeviceType, runtime: Runtime) -> SimulatorEntry:
+    return SimulatorEntry(name=name, udid=udid, device=device.name, runtime=runtime.name)

@@ -3,14 +3,14 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from .config import Config, SimulatorConfig, require_simulator
+from .config import Config, SimulatorEntry, require_simulator
 
 
-def _destination(sim: SimulatorConfig) -> str:
+def _destination(sim: SimulatorEntry) -> str:
     return f"platform=iOS Simulator,id={sim.udid}"
 
 
-def _common(cfg: Config, sim: SimulatorConfig | None, *, release: bool) -> list[str]:
+def _common(cfg: Config, sim: SimulatorEntry | None, *, release: bool) -> list[str]:
     configuration = "Release" if release else cfg.project.configuration
     argv: list[str] = [
         "xcodebuild",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 from . import simulator as sim_mod, ui
-from .config import SimulatorConfig, load, write_simulator
+from .config import SimulatorEntry, load, write_simulator
 from .errors import UserError
 from .paths import find_config
 
@@ -52,7 +52,7 @@ def run(args: argparse.Namespace) -> int:
         ui.step(f"Creating {sim_name}…")
         udid = sim_mod.create(sim_name, device, runtime)
 
-    sim_cfg = SimulatorConfig(name=sim_name, udid=udid, device=device.name, runtime=runtime.name)
+    sim_cfg = SimulatorEntry(name=sim_name, udid=udid, device=device.name, runtime=runtime.name)
     write_simulator(cfg_path, sim_cfg)
 
     sim_mod.boot(udid)
