@@ -41,11 +41,11 @@ def _bundle_id(app_path: Path) -> str:
 def run(args: argparse.Namespace) -> int:
     cfg_path = args.config.resolve() if args.config else find_project_toml()
     cfg = load(cfg_path)
-    sim = resolve_sim(cfg, label=None)
+    sim = resolve_sim(cfg, label=getattr(args, "sim", None))
 
     # 1. Build
     ui.step("Building…")
-    argv = xcodebuild.build_argv(cfg, release=args.release)
+    argv = xcodebuild.build_argv(cfg, release=args.release, sim_label=getattr(args, "sim", None))
     proc_run(argv, verbose=args.verbose)
 
     # 2. Locate .app

@@ -130,35 +130,40 @@ def build_parser() -> argparse.ArgumentParser:
         "worktree_ios_dev_tool.sim", fromlist=["cmd_prune"]
     ).cmd_prune(a))
 
-    b = sub.add_parser("boot", help="Create (first run) or boot the per-worktree simulator.")
-    b.add_argument("--recreate", action="store_true", help="Delete the named sim and re-enter first-run.")
-    b.add_argument("--all-devices", action="store_true", help="Disable the iPhone 17 filter in the picker.")
+    b = sub.add_parser("build", help="xcodebuild build the main scheme.")
+    b.add_argument("--release", action="store_true", help="Use Release configuration.")
+    b.add_argument("--scheme", default=None, help="Override project.scheme.")
+    b.add_argument("--sim", default=None, help="Sim label when multiple are configured.")
     _add_common(b)
-    b.set_defaults(func=_cmd_boot)
+    b.set_defaults(func=_cmd_build)
 
-    for verb in ("build", "test", "run", "clean", "wipe-derived"):
-        sp = sub.add_parser(verb)
-        _add_common(sp)
-        sp.set_defaults(func={
-            "build": _cmd_build,
-            "test": _cmd_test,
-            "run": _cmd_run,
-            "clean": _cmd_clean,
-            "wipe-derived": _cmd_wipe_derived,
-        }[verb])
-        if verb in ("build", "test"):
-            sp.add_argument("--release", action="store_true", help="Use Release configuration.")
-            sp.add_argument("--scheme", default=None, help="Override project.scheme.")
-        if verb == "test":
-            sp.add_argument("--only-testing", action="append", default=[], metavar="TEST_ID")
-            sp.add_argument("--skip-testing", action="append", default=[], metavar="TEST_ID")
-        if verb == "run":
-            sp.add_argument("--release", action="store_true", help="Use Release configuration.")
-        if verb == "wipe-derived":
-            sp.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
+    t = sub.add_parser("test", help="xcodebuild test the main scheme.")
+    t.add_argument("--release", action="store_true", help="Use Release configuration.")
+    t.add_argument("--scheme", default=None, help="Override project.scheme.")
+    t.add_argument("--only-testing", action="append", default=[], metavar="TEST_ID")
+    t.add_argument("--skip-testing", action="append", default=[], metavar="TEST_ID")
+    t.add_argument("--sim", default=None, help="Sim label when multiple are configured.")
+    _add_common(t)
+    t.set_defaults(func=_cmd_test)
+
+    rn = sub.add_parser("run", help="Build, install on the simulator, launch.")
+    rn.add_argument("--release", action="store_true", help="Use Release configuration.")
+    rn.add_argument("--sim", default=None, help="Sim label when multiple are configured.")
+    _add_common(rn)
+    rn.set_defaults(func=_cmd_run)
+
+    cl = sub.add_parser("clean", help="xcodebuild clean.")
+    _add_common(cl)
+    cl.set_defaults(func=_cmd_clean)
+
+    wd = sub.add_parser("wipe-derived", help="rm -rf the DerivedData dir.")
+    wd.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
+    _add_common(wd)
+    wd.set_defaults(func=_cmd_wipe_derived)
 
     tp = sub.add_parser("test-package", help="Run a local Swift package's tests.")
     tp.add_argument("name", help="Directory / scheme name under packages_root.")
+    tp.add_argument("--sim", default=None, help="Sim label when multiple are configured.")
     _add_common(tp)
     tp.set_defaults(func=_cmd_test_package)
 
@@ -193,17 +198,14 @@ def _cmd_wipe_derived(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_boot(args: argparse.Namespace) -> int:
-    from .boot import run as boot_run
-    return boot_run(args)
-
-
 def _cmd_build(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     scheme = args.scheme or cfg.project.scheme
     config = "Release" if args.release else cfg.project.configuration
     ui.step(f"Building {scheme} ({config})…")
-    argv = xcodebuild.build_argv(cfg, release=args.release, scheme_override=args.scheme)
+    argv = xcodebuild.build_argv(
+        cfg, release=args.release, scheme_override=args.scheme, sim_label=args.sim,
+    )
     run(argv, verbose=args.verbose)
     ui.done("Build succeeded.")
     return 0
@@ -215,11 +217,9 @@ def _cmd_test(args: argparse.Namespace) -> int:
     config = "Release" if args.release else cfg.project.configuration
     ui.step(f"Testing {scheme} ({config})…")
     argv = xcodebuild.test_argv(
-        cfg,
-        release=args.release,
-        scheme_override=args.scheme,
-        only_testing=args.only_testing,
-        skip_testing=args.skip_testing,
+        cfg, release=args.release, scheme_override=args.scheme,
+        only_testing=args.only_testing, skip_testing=args.skip_testing,
+        sim_label=args.sim,
     )
     run(argv, verbose=args.verbose)
     ui.done("Tests passed.")
@@ -234,7 +234,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 def _cmd_test_package(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     ui.step(f"Testing package {args.name}…")
-    argv, cwd = packages_mod.resolve(cfg, args.name)
+    argv, cwd = packages_mod.resolve(cfg, args.name, sim_label=args.sim)
     run(argv, cwd=cwd, verbose=args.verbose)
     ui.done(f"Tests passed — {args.name}.")
     return 0

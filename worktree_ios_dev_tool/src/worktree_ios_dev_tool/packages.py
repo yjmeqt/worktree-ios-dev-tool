@@ -17,7 +17,7 @@ from .config import Config, resolve_sim
 from .errors import UserError
 
 
-def resolve(cfg: Config, package_name: str) -> tuple[list[str], Path]:
+def resolve(cfg: Config, package_name: str, *, sim_label: str | None = None) -> tuple[list[str], Path]:
     """Return (argv, cwd) for testing a local package."""
     pkg_dir = cfg.packages_root / package_name
     if not pkg_dir.is_dir():
@@ -29,7 +29,7 @@ def resolve(cfg: Config, package_name: str) -> tuple[list[str], Path]:
     override = cfg.package_overrides.get(package_name)
     scheme = override.scheme if (override and override.scheme) else package_name
 
-    sim = resolve_sim(cfg, label=None)
+    sim = resolve_sim(cfg, label=sim_label)
     argv = [
         "xcodebuild",
         "test",

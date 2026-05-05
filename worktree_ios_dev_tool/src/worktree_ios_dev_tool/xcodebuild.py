@@ -25,8 +25,15 @@ def _common(cfg: Config, sim: SimulatorEntry | None, *, release: bool) -> list[s
     return argv
 
 
-def build_argv(cfg: Config, *, release: bool = False, scheme_override: str | None = None) -> list[str]:
-    sim = resolve_sim(cfg, label=None)
+def build_argv(
+    cfg: Config, *,
+    release: bool = False,
+    scheme_override: str | None = None,
+    sim_label: str | None = None,
+) -> list[str]:
+    """Build argv for ``xcodebuild build``. *sim_label* selects which entry
+    in ``cfg.simulators`` provides the destination."""
+    sim = resolve_sim(cfg, label=sim_label)
     argv = _common(cfg, sim, release=release)
     if scheme_override:
         argv[argv.index("-scheme") + 1] = scheme_override
@@ -40,8 +47,9 @@ def test_argv(
     scheme_override: str | None = None,
     only_testing: Sequence[str] = (),
     skip_testing: Sequence[str] = (),
+    sim_label: str | None = None,
 ) -> list[str]:
-    sim = resolve_sim(cfg, label=None)
+    sim = resolve_sim(cfg, label=sim_label)
     argv = _common(cfg, sim, release=release) + ["test"]
     if scheme_override:
         argv[argv.index("-scheme") + 1] = scheme_override
