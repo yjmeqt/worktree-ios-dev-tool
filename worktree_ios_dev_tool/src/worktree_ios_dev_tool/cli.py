@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import json
 import shutil
 import sys
 from pathlib import Path
 
-from . import bootstrap, config as config_mod, packages as packages_mod, simulator as sim_mod, ui, xcodebuild
-from .errors import EnvError, WorktreeIosError
+from . import config as config_mod, packages as packages_mod, ui, xcodebuild
+from .errors import WorktreeIosError
 from .paths import find_project_toml
 from .proc import run
 
@@ -28,13 +27,30 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="worktree-ios-dev-tool", description="iOS worktree build / sim / test CLI.")
     sub = p.add_subparsers(dest="verb", required=True)
 
-    bs = sub.add_parser("bootstrap", help="Create worktree-ios-dev/ in this worktree.")
-    bs.add_argument("--project", default=None, help="Relative path to .xcodeproj (skips auto-discovery).")
-    bs.add_argument("--scheme", default=None, help="Scheme name (skips auto-discovery).")
-    bs.add_argument("--yes", action="store_true", help="Accept all detected defaults; error if ambiguous.")
-    bs.add_argument("--force", action="store_true", help="Re-seed config.toml even if it already exists.")
-    _add_common(bs)
-    bs.set_defaults(func=_cmd_bootstrap)
+    proj = sub.add_parser("proj", help="Project lifecycle: init / config / doctor.")
+    proj_sub = proj.add_subparsers(dest="proj_verb", required=True)
+
+    pi = proj_sub.add_parser("init", help="Scaffold worktree-ios-dev/ and write project.toml.")
+    pi.add_argument("--project", default=None, help="Relative path to .xcodeproj (skips auto-discovery).")
+    pi.add_argument("--scheme", default=None, help="Scheme name (skips auto-discovery).")
+    pi.add_argument("--yes", action="store_true", help="Accept all detected defaults; error if ambiguous.")
+    pi.add_argument("--force", action="store_true", help="Re-write project.toml even if it already exists.")
+    _add_common(pi)
+    pi.set_defaults(func=lambda a: __import__(
+        "worktree_ios_dev_tool.proj", fromlist=["cmd_init"]
+    ).cmd_init(a))
+
+    pc = proj_sub.add_parser("config", help="Print the resolved project + simulators view as JSON.")
+    _add_common(pc)
+    pc.set_defaults(func=lambda a: __import__(
+        "worktree_ios_dev_tool.proj", fromlist=["cmd_config"]
+    ).cmd_config(a))
+
+    pd = proj_sub.add_parser("doctor", help="Run sanity checks on tooling, project, and simulators.")
+    _add_common(pd)
+    pd.set_defaults(func=lambda a: __import__(
+        "worktree_ios_dev_tool.proj", fromlist=["cmd_doctor"]
+    ).cmd_doctor(a))
 
     b = sub.add_parser("boot", help="Create (first run) or boot the per-worktree simulator.")
     b.add_argument("--recreate", action="store_true", help="Delete the named sim and re-enter first-run.")
@@ -42,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(b)
     b.set_defaults(func=_cmd_boot)
 
-    for verb in ("build", "test", "run", "clean", "wipe-derived", "config", "doctor"):
+    for verb in ("build", "test", "run", "clean", "wipe-derived"):
         sp = sub.add_parser(verb)
         _add_common(sp)
         sp.set_defaults(func={
@@ -51,8 +67,6 @@ def build_parser() -> argparse.ArgumentParser:
             "run": _cmd_run,
             "clean": _cmd_clean,
             "wipe-derived": _cmd_wipe_derived,
-            "config": _cmd_config,
-            "doctor": _cmd_doctor,
         }[verb])
         if verb in ("build", "test"):
             sp.add_argument("--release", action="store_true", help="Use Release configuration.")
@@ -74,40 +88,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # ---- handlers ----------------------------------------------------------------
-
-def _cmd_bootstrap(args: argparse.Namespace) -> int:
-    return bootstrap.run(
-        project=args.project,
-        scheme=args.scheme,
-        yes=args.yes,
-        force=args.force,
-    )
-
-
-def _cmd_config(args: argparse.Namespace) -> int:
-    cfg = _load_config(args)
-    payload = {
-        "config_path": str(cfg.config_path),
-        "worktree_root": str(cfg.worktree_root),
-        "derived_data": str(cfg.derived_data),
-        "project": {
-            "path": str(cfg.project.path),
-            "scheme": cfg.project.scheme,
-            "configuration": cfg.project.configuration,
-            "simulator_prefix": cfg.project.simulator_prefix,
-        },
-        "simulators": {
-            label: {
-                "name": s.name, "udid": s.udid, "device": s.device, "runtime": s.runtime,
-            } for label, s in cfg.simulators.items()
-        },
-        "packages_root": str(cfg.packages_root),
-        "package_overrides": {k: {"scheme": v.scheme} for k, v in cfg.package_overrides.items()},
-        "extras": {"xcodebuild_flags": cfg.extras_xcodebuild_flags},
-    }
-    print(json.dumps(payload, indent=2))
-    return 0
-
 
 def _cmd_clean(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
@@ -179,66 +159,6 @@ def _cmd_test_package(args: argparse.Namespace) -> int:
     argv, cwd = packages_mod.resolve(cfg, args.name)
     run(argv, cwd=cwd, verbose=args.verbose)
     ui.done(f"Tests passed — {args.name}.")
-    return 0
-
-
-def _cmd_doctor(args: argparse.Namespace) -> int:
-    problems: list[str] = []
-
-    try:
-        cfg = _load_config(args)
-        ui.step(f"config.toml    {cfg.config_path}")
-    except EnvError as e:
-        ui.problem(f"config.toml    {e}")
-        problems.append(str(e))
-        cfg = None
-
-    for binary in ("xcodebuild", "xcrun"):
-        path = shutil.which(binary)
-        if path is None:
-            ui.problem(f"{binary:<14} not on PATH")
-            problems.append(f"`{binary}` not on PATH.")
-        else:
-            ui.step(f"{binary:<14} {path}")
-
-    mint_path = shutil.which("mint")
-    if mint_path is None:
-        ui.warn("mint           not installed (optional — enables xcbeautify)")
-    else:
-        ui.step(f"mint           {mint_path}")
-
-    if cfg is not None:
-        if not cfg.project.path.exists():
-            ui.problem(f"project        not found: {cfg.project.path}")
-            problems.append(f"project.path does not exist: {cfg.project.path}")
-        else:
-            ui.step(f"project        {cfg.project.path}")
-
-        if not cfg.simulators:
-            ui.problem("simulators     none configured — run `worktree-ios-dev-tool boot`")
-            problems.append("No simulators. Run `worktree-ios-dev-tool boot`.")
-        else:
-            for label, sim in cfg.simulators.items():
-                dev = sim_mod.find_device_by_udid(sim.udid)
-                if dev is None:
-                    ui.problem(f"simulators[{label}]  UDID not found: {sim.udid}")
-                    problems.append(f"Simulator UDID not found: {sim.udid}")
-                else:
-                    state = dev.get("state", "?")
-                    ui.step(f"simulators[{label}]  {sim.name} ({sim.udid})  state={state}")
-
-        if not cfg.derived_data.parent.exists():
-            ui.problem(f"worktree-ios-dev/  missing: {cfg.derived_data.parent}")
-            problems.append(f"worktree-ios-dev/ missing: {cfg.derived_data.parent}")
-
-    ui.sep()
-    if problems:
-        ui.done(f"{len(problems)} problem(s) found.")
-        for p in problems:
-            ui.info(f"- {p}")
-        return 1
-
-    ui.done("All checks passed.")
     return 0
 
 
