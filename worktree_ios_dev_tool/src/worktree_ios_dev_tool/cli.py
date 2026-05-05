@@ -14,7 +14,10 @@ from .proc import run
 
 
 def _add_common(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--config", type=Path, default=None, help="Path to project.toml (overrides walk-up discovery).")
+    parser.add_argument(
+        "--project-toml", dest="config", type=Path, default=None,
+        help="Path to project.toml (overrides walk-up discovery). simulator.toml is resolved alongside it.",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Stream subprocess output and show tracebacks.")
 
 
