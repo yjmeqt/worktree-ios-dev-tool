@@ -8,6 +8,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 from . import ui
 from .config import SimulatorEntry
@@ -200,3 +201,61 @@ def pick_device_and_runtime(*, iphone_17_only: bool) -> tuple[DeviceType, Runtim
 
 def to_config(name: str, udid: str, device: DeviceType, runtime: Runtime) -> SimulatorEntry:
     return SimulatorEntry(name=name, udid=udid, device=device.name, runtime=runtime.name)
+
+
+def list_all_devices() -> list[dict]:
+    """Return a flat list of device dicts from ``simctl list devices --json``.
+
+    Each dict is the verbatim simctl entry plus an ``_runtime`` key copying
+    the runtime identifier so callers can filter / display without re-parsing.
+    """
+    ensure_tooling()
+    data = json.loads(run_json(["xcrun", "simctl", "list", "devices", "--json"]))
+    out: list[dict] = []
+    for runtime_id, devices in data.get("devices", {}).items():
+        for dev in devices:
+            d = dict(dev)
+            d["_runtime"] = runtime_id
+            out.append(d)
+    return out
+
+
+def list_devices_by_prefix(prefix: str) -> list[dict]:
+    """Return all devices whose ``name`` starts with ``<prefix>-``."""
+    pattern = prefix + "-"
+    return [d for d in list_all_devices() if d.get("name", "").startswith(pattern)]
+
+
+def shutdown(udid: str) -> None:
+    """Shutdown the device. No-op if it isn't currently booted."""
+    dev = find_device_by_udid(udid)
+    if dev is None:
+        return
+    if dev.get("state") != "Booted":
+        return
+    run(["xcrun", "simctl", "shutdown", udid])
+
+
+def device_data_dir(udid: str) -> Path:
+    """Return the macOS path where simctl stores a device's disk image and state."""
+    return Path.home() / "Library" / "Developer" / "CoreSimulator" / "Devices" / udid
+
+
+def du_bytes(path: Path) -> int:
+    """Return the recursive on-disk size of *path* in bytes.
+
+    Returns 0 for missing paths so callers can show "0 B" rather than crash.
+    Uses ``os.walk`` to avoid the cost of forking ``du(1)`` per device.
+    """
+    import os
+    if not path.exists():
+        return 0
+    total = 0
+    for root, _, files in os.walk(path, followlinks=False):
+        for f in files:
+            try:
+                total += (Path(root) / f).stat().st_size
+            except (FileNotFoundError, PermissionError):
+                # Devices can churn while we walk; ignore transient races.
+                continue
+    return total
