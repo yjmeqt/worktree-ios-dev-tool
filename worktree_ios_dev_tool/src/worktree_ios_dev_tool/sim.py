@@ -334,3 +334,89 @@ def cmd_du(args: argparse.Namespace) -> int:
     ui.sep()
     ui.done(f"Total: {_format_bytes(total)} across {len(rows)} simulator(s).")
     return 0
+
+
+def find_orphans(
+    devices: list[dict], *, prefix: str, live_basenames: set[str],
+) -> list[tuple[dict, str, str]]:
+    """Return ``[(device, basename, label), ...]`` for every managed device
+    whose worktree-basename segment is *not* in *live_basenames*.
+
+    Pure function — gets all simctl/git work injected — so we can unit-test
+    orphan detection without forking either tool.
+    """
+    out: list[tuple[dict, str, str]] = []
+    for dev in devices:
+        parsed = sim_mod.parse_managed_name(dev.get("name", ""), prefix=prefix)
+        if parsed is None:
+            continue
+        basename, label = parsed
+        if basename not in live_basenames:
+            out.append((dev, basename, label))
+    return out
+
+
+def git_worktree_basenames(start: Path) -> set[str]:
+    """Run ``git worktree list --porcelain`` from *start* and return basenames.
+
+    A worktree's "basename" is ``Path(<worktree path>).name`` — that's the
+    same string we encode into simulator names, so it's the right key for
+    the orphan check.
+    """
+    import subprocess
+    result = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=start, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise UserError(
+            "`sim prune` must be run from inside a git worktree of the project repo. "
+            f"`git worktree list` failed: {result.stderr.strip()}"
+        )
+    basenames: set[str] = set()
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            basenames.add(Path(line[len("worktree "):]).name)
+    return basenames
+
+
+def cmd_prune(args: argparse.Namespace) -> int:
+    """Detect + remove orphaned managed simulators (worktrees that no longer exist).
+
+    Combines a global simctl scan with ``git worktree list`` to find any
+    managed device whose basename segment is missing from the live worktrees.
+    Interactive confirmation by default; ``--yes`` skips it.
+    """
+    cfg, _ = _load(args)
+    prefix = cfg.project.simulator_prefix
+    devices = sim_mod.list_devices_by_prefix(prefix)
+    live = git_worktree_basenames(cfg.worktree_root)
+
+    orphans = find_orphans(devices, prefix=prefix, live_basenames=live)
+    if not orphans:
+        ui.done("No orphaned simulators.")
+        return 0
+
+    by_basename: dict[str, list[tuple[dict, str]]] = defaultdict(list)
+    for dev, basename, label in orphans:
+        by_basename[basename].append((dev, label))
+
+    ui.info(f"Found {len(orphans)} orphaned simulator(s):")
+    for basename in sorted(by_basename):
+        ui.info(f"  worktree={basename} (gone)")
+        for dev, label in sorted(by_basename[basename], key=lambda t: t[1]):
+            ui.info(f"    {dev['name']:<40} {dev['udid']}  label={label}")
+
+    if not args.yes:
+        if not ui.is_interactive():
+            raise UserError("`sim prune` requires --yes when stdin is not a TTY.")
+        resp = input("Delete these simulators? [y/N] ").strip().lower()
+        if resp not in ("y", "yes"):
+            ui.done("Aborted.")
+            return 1
+
+    for dev, _b, _l in orphans:
+        sim_mod.shutdown(dev["udid"])
+        sim_mod.delete(dev["udid"])
+    ui.done(f"Pruned {len(orphans)} orphaned simulator(s).")
+    return 0

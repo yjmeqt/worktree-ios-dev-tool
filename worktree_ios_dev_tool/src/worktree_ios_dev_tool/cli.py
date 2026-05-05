@@ -123,6 +123,13 @@ def build_parser() -> argparse.ArgumentParser:
         "worktree_ios_dev_tool.sim", fromlist=["cmd_du"]
     ).cmd_du(a))
 
+    spr = sim_sub.add_parser("prune", help="Find + delete simulators whose worktrees no longer exist.")
+    spr.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
+    _add_common(spr)
+    spr.set_defaults(func=lambda a: __import__(
+        "worktree_ios_dev_tool.sim", fromlist=["cmd_prune"]
+    ).cmd_prune(a))
+
     b = sub.add_parser("boot", help="Create (first run) or boot the per-worktree simulator.")
     b.add_argument("--recreate", action="store_true", help="Delete the named sim and re-enter first-run.")
     b.add_argument("--all-devices", action="store_true", help="Disable the iPhone 17 filter in the picker.")
