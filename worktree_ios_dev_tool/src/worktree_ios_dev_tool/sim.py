@@ -279,3 +279,58 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
         sim_toml.unlink()
     ui.done(f"Cleaned up {len(matched)} simulator(s) for worktree `{basename}`.")
     return 0
+
+
+def _format_bytes(n: int) -> str:
+    """Render a byte count as a power-of-1024 string with one decimal."""
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    size = float(n)
+    for unit in units:
+        if size < 1024:
+            return f"{size:5.1f} {unit}"
+        size /= 1024
+    return f"{size:5.1f} PiB"
+
+
+def cmd_du(args: argparse.Namespace) -> int:
+    """Report disk usage for every managed simulator.
+
+    Default: scan globally; ``--this-worktree`` filters to the current basename.
+    Output is grouped by parsed worktree-basename, sorted alphabetically.
+    """
+    cfg, _ = _load(args)
+    prefix = cfg.project.simulator_prefix
+    devices = sim_mod.list_devices_by_prefix(prefix)
+
+    rows: list[tuple[str, str, str, int]] = []  # (basename, label, name, bytes)
+    for dev in devices:
+        parsed = sim_mod.parse_managed_name(dev["name"], prefix=prefix)
+        if parsed is None:
+            continue
+        basename, label = parsed
+        if args.this_worktree and basename != cfg.worktree_root.name:
+            continue
+        size = sim_mod.du_bytes(sim_mod.device_data_dir(dev["udid"]))
+        rows.append((basename, label, dev["name"], size))
+
+    if not rows:
+        scope = "this worktree" if args.this_worktree else f"prefix {prefix!r}"
+        ui.done(f"No managed simulators found for {scope}.")
+        return 0
+
+    rows.sort()
+    grouped: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
+    total = 0
+    for basename, label, name, size in rows:
+        grouped[basename].append((label, name, size))
+        total += size
+
+    ui.info(f"{cfg.project.simulator_prefix} simulators (prefix={prefix}):")
+    ui.sep()
+    for basename in sorted(grouped):
+        ui.info(f"worktree={basename}")
+        for label, name, size in sorted(grouped[basename]):
+            ui.info(f"  {label:<10} {name:<40} {_format_bytes(size)}")
+    ui.sep()
+    ui.done(f"Total: {_format_bytes(total)} across {len(rows)} simulator(s).")
+    return 0

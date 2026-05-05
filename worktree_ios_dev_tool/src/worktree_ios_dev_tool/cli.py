@@ -115,6 +115,14 @@ def build_parser() -> argparse.ArgumentParser:
         "worktree_ios_dev_tool.sim", fromlist=["cmd_cleanup"]
     ).cmd_cleanup(a))
 
+    sdu = sim_sub.add_parser("du", help="Report disk usage of every managed simulator.")
+    sdu.add_argument("--this-worktree", action="store_true",
+                     help="Restrict scan to this worktree's simulators.")
+    _add_common(sdu)
+    sdu.set_defaults(func=lambda a: __import__(
+        "worktree_ios_dev_tool.sim", fromlist=["cmd_du"]
+    ).cmd_du(a))
+
     b = sub.add_parser("boot", help="Create (first run) or boot the per-worktree simulator.")
     b.add_argument("--recreate", action="store_true", help="Delete the named sim and re-enter first-run.")
     b.add_argument("--all-devices", action="store_true", help="Disable the iPhone 17 filter in the picker.")
