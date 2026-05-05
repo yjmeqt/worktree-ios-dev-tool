@@ -221,3 +221,61 @@ def cmd_remove(args: argparse.Namespace) -> int:
     remove_simulator_entry(sim_toml, args.label)
     ui.done(f"Removed `{args.label}` from simulator.toml.")
     return 0
+
+
+def match_for_cleanup(devices: list[dict], *, prefix: str, basename: str) -> list[dict]:
+    """Filter *devices* to those whose name starts with ``<prefix>-<basename>-``.
+
+    Pure function so we can unit-test the prefix-scan logic without simctl.
+    The trailing dash is required to distinguish ``Pulse-feat-auth-*`` from
+    ``Pulse-feat-auth-extras-*`` if a future basename were a prefix of another.
+    """
+    needle = f"{prefix}-{basename}-"
+    return [d for d in devices if d.get("name", "").startswith(needle)]
+
+
+def cmd_cleanup(args: argparse.Namespace) -> int:
+    """Decommission every simulator owned by this worktree.
+
+    Algorithm:
+      1. Scan simctl for all devices.
+      2. Filter to ``<simulator_prefix>-<worktree_basename>-*`` (prefix-only;
+         we do not consult ``simulator.toml`` so a corrupt/missing file is
+         survivable).
+      3. Confirm with the user (skipped under ``--yes``).
+      4. Shutdown + delete each.
+      5. Delete ``simulator.toml`` if present.
+    """
+    cfg, sim_toml = _load(args)
+    prefix = cfg.project.simulator_prefix
+    basename = cfg.worktree_root.name
+
+    devices = sim_mod.list_all_devices()
+    matched = match_for_cleanup(devices, prefix=prefix, basename=basename)
+    if not matched:
+        ui.done(f"No managed simulators found for worktree `{basename}`.")
+        if sim_toml.exists():
+            sim_toml.unlink()
+            ui.info(f"Removed stale {sim_toml}.")
+        return 0
+
+    ui.info(f"Will shutdown + delete {len(matched)} simulator(s):")
+    for d in matched:
+        ui.info(f"  {d['name']}  ({d['udid']})")
+    if not args.yes:
+        if not ui.is_interactive():
+            raise UserError(
+                "`sim cleanup` requires --yes when stdin is not a TTY."
+            )
+        resp = input("Proceed? [y/N] ").strip().lower()
+        if resp not in ("y", "yes"):
+            ui.done("Aborted.")
+            return 1
+
+    for d in matched:
+        sim_mod.shutdown(d["udid"])
+        sim_mod.delete(d["udid"])
+    if sim_toml.exists():
+        sim_toml.unlink()
+    ui.done(f"Cleaned up {len(matched)} simulator(s) for worktree `{basename}`.")
+    return 0
