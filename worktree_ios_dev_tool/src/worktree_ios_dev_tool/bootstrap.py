@@ -1,5 +1,10 @@
 # worktree_ios_dev_tool/src/worktree_ios_dev_tool/bootstrap.py
-"""Implementation of the `bootstrap` verb."""
+"""Implementation of the ``proj init`` verb.
+
+The module name is historical (predates the ``proj`` namespace); the public
+entry point is :func:`run`, which is invoked from
+:mod:`worktree_ios_dev_tool.proj.cmd_init`.
+"""
 from __future__ import annotations
 
 import json
@@ -11,7 +16,7 @@ from . import ui
 from .errors import UserError
 from .paths import find_worktree_root_for_bootstrap
 
-_GITIGNORE_MARKER = "# added by worktree-ios-dev-tool bootstrap"
+_GITIGNORE_MARKER = "# added by worktree-ios-dev-tool proj init"
 _GITIGNORE_ENTRY = "worktree-ios-dev/"
 
 
