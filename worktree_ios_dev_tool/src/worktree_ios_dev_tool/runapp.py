@@ -8,7 +8,7 @@ from pathlib import Path
 from . import simulator as sim_mod, ui, xcodebuild
 from .config import load, resolve_sim
 from .errors import UserError
-from .paths import find_config
+from .paths import find_project_toml
 from .proc import run as proc_run
 
 
@@ -39,7 +39,7 @@ def _bundle_id(app_path: Path) -> str:
 
 
 def run(args: argparse.Namespace) -> int:
-    cfg_path = args.config.resolve() if args.config else find_config()
+    cfg_path = args.config.resolve() if args.config else find_project_toml()
     cfg = load(cfg_path)
     sim = resolve_sim(cfg, label=None)
 

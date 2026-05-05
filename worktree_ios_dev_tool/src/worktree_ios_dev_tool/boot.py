@@ -5,14 +5,15 @@ from __future__ import annotations
 import argparse
 
 from . import simulator as sim_mod, ui
-from .config import SimulatorEntry, load, write_simulator
+from .config import SimulatorEntry, load, upsert_simulator_entry
 from .errors import UserError
-from .paths import find_config
+from .paths import find_project_toml, simulator_toml_for
 
 
 def run(args: argparse.Namespace) -> int:
-    cfg_path = args.config.resolve() if args.config else find_config()
+    cfg_path = args.config.resolve() if args.config else find_project_toml()
     cfg = load(cfg_path)
+    sim_toml = simulator_toml_for(cfg_path)
 
     sim_mod.ensure_tooling()
 
@@ -38,8 +39,8 @@ def run(args: argparse.Namespace) -> int:
     # First run: pick + create + persist + boot.
     device, runtime = sim_mod.pick_device_and_runtime(iphone_17_only=not args.all_devices)
 
-    prefix = cfg.project.simulator_prefix or cfg.project.scheme
-    sim_name = f"{prefix}-{cfg.worktree_root.name}"
+    prefix = cfg.project.simulator_prefix
+    sim_name = f"{prefix}-{cfg.worktree_root.name}-default"
 
     existing = sim_mod.find_device_by_name(sim_name)
     if existing is not None:
@@ -54,7 +55,7 @@ def run(args: argparse.Namespace) -> int:
         udid = sim_mod.create(sim_name, device, runtime)
 
     sim_cfg = SimulatorEntry(name=sim_name, udid=udid, device=device.name, runtime=runtime.name)
-    write_simulator(cfg_path, sim_cfg)
+    upsert_simulator_entry(sim_toml, "default", sim_cfg)
 
     sim_mod.boot(udid)
 

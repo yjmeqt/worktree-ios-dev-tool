@@ -9,29 +9,62 @@ from pathlib import Path
 from .errors import EnvError, UserError
 
 CONFIG_DIRNAME = "worktree-ios-dev"
-CONFIG_FILENAME = "config.toml"
+PROJECT_FILENAME = "project.toml"
+SIMULATOR_FILENAME = "simulator.toml"
+LEGACY_FILENAME = "config.toml"
 
 _LOCAL_FILESYSTEMS = frozenset({"apfs", "hfs"})
 _OFFLOAD_ROOT = Path("/tmp/worktree-ios-dev")
 
 
-def find_config(start: Path | None = None) -> Path:
-    """Walk up from `start` (default cwd) looking for <dir>/worktree-ios-dev/config.toml.
-    Stops at $HOME or filesystem root. Raises EnvError if not found."""
+def find_project_toml(start: Path | None = None) -> Path:
+    """Walk up from *start* (default: cwd) to find ``worktree-ios-dev/project.toml``.
+
+    Stops at $HOME or filesystem root. If a legacy ``config.toml`` is found at
+    a step where ``project.toml`` is missing, raise :class:`UserError` with
+    the manual-migration recipe (we never auto-convert).
+
+    Raises:
+        UserError: when a legacy config.toml is found instead of project.toml.
+        EnvError:  when nothing is found by the time we reach $HOME / root.
+    """
     cwd = (start or Path.cwd()).resolve()
     home = Path.home().resolve()
     probe = cwd
     while True:
-        candidate = probe / CONFIG_DIRNAME / CONFIG_FILENAME
-        if candidate.is_file():
-            return candidate
+        cfg_dir = probe / CONFIG_DIRNAME
+        new = cfg_dir / PROJECT_FILENAME
+        legacy = cfg_dir / LEGACY_FILENAME
+        if new.is_file():
+            return new
+        if legacy.is_file() and not new.is_file():
+            raise UserError(_legacy_message(legacy))
         if probe == probe.parent or probe == home:
             break
         probe = probe.parent
     raise EnvError(
-        f"No `{CONFIG_DIRNAME}/{CONFIG_FILENAME}` found walking up from `{cwd}`. "
-        f"Run `worktree-ios-dev-tool bootstrap` from your worktree to set one up."
+        f"No `{CONFIG_DIRNAME}/{PROJECT_FILENAME}` found walking up from `{cwd}`. "
+        f"Run `worktree-ios-dev-tool proj init` from your worktree to set one up."
     )
+
+
+def _legacy_message(legacy_path: Path) -> str:
+    """Build the migration instructions printed when a legacy config.toml is detected."""
+    return (
+        f"Detected legacy config.toml at {legacy_path}.\n"
+        f"This tool now uses split project.toml + simulator.toml.\n"
+        f"Manual migration:\n"
+        f"  1. Read the legacy values:    cat {legacy_path}\n"
+        f"  2. Write the new project.toml: worktree-ios-dev-tool proj init --force "
+        f"--project <relpath> --scheme <name>\n"
+        f"  3. Recreate the simulator:     worktree-ios-dev-tool sim pick\n"
+        f"  4. Remove the legacy file:     rm {legacy_path}"
+    )
+
+
+def simulator_toml_for(project_toml: Path) -> Path:
+    """Return the expected simulator.toml path that pairs with *project_toml*."""
+    return project_toml.parent / SIMULATOR_FILENAME
 
 
 def config_dir(config_path: Path) -> Path:

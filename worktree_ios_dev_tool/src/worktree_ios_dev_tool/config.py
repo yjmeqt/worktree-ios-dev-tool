@@ -10,7 +10,7 @@ from typing import Any
 import tomlkit
 
 from .errors import UserError
-from .paths import config_dir, derived_data_dir, worktree_root
+from .paths import derived_data_dir, simulator_toml_for, worktree_root
 
 
 @dataclass(frozen=True)
@@ -39,10 +39,6 @@ class SimulatorEntry:
     runtime: str
 
 
-# Temporary alias for backward compatibility; to be removed in a later task.
-SimulatorConfig = SimulatorEntry
-
-
 @dataclass(frozen=True)
 class PackageOverride:
     scheme: str | None = None
@@ -66,7 +62,11 @@ class Config:
     extras_xcodebuild_flags: list[str] = field(default_factory=list)
 
 
-_ALLOWED_TOP_LEVEL = {"project", "simulator", "packages_root", "packages", "extras"}
+PROJECT_SCHEMA_VERSION = 1
+SIMULATOR_SCHEMA_VERSION = 1
+
+_ALLOWED_PROJECT_TOP = {"schema_version", "project", "packages_root", "packages", "extras"}
+_ALLOWED_SIMULATOR_TOP = {"schema_version", "simulators"}
 _ALLOWED_PROJECT = {"path", "scheme", "configuration", "simulator_prefix"}
 _ALLOWED_SIMULATOR = {"name", "udid", "device", "runtime"}
 _ALLOWED_PACKAGES_ROOT = {"path"}
@@ -83,68 +83,115 @@ def _require_keys(table_name: str, table: dict[str, Any], allowed: set[str]) -> 
         )
 
 
-def load(config_path: Path) -> Config:
-    """Parse and validate config.toml. Raises UserError on schema violations."""
-    with config_path.open("rb") as fh:
-        data = tomllib.load(fh)
+def _read_toml(path: Path) -> dict:
+    """Return parsed TOML, surfacing path in any error."""
+    with path.open("rb") as fh:
+        return tomllib.load(fh)
 
-    _require_keys("<root>", data, _ALLOWED_TOP_LEVEL)
 
-    if "project" not in data:
+def _check_version(data: dict, path: Path, *, expected: int, recovery: str) -> None:
+    """Validate ``schema_version`` at the top of *data*.
+
+    Missing → UserError citing *recovery* (the verb to re-run).
+    Mismatched → UserError naming the version we found vs what we accept.
+    """
+    if "schema_version" not in data:
         raise UserError(
-            f"Missing [project] section in {config_path}. "
-            f"Re-run `worktree-ios-dev-tool bootstrap --force` to re-seed."
+            f"{path}: missing `schema_version`. "
+            f"Re-run `worktree-ios-dev-tool {recovery}` to regenerate the file."
         )
-    proj = data["project"]
+    v = data["schema_version"]
+    if v != expected:
+        raise UserError(
+            f"{path}: schema_version {v!r} not supported (expected {expected}). "
+            f"Upgrade worktree-ios-dev-tool or migrate manually."
+        )
+
+
+def _load_simulators(simulator_toml: Path) -> dict[str, SimulatorEntry]:
+    """Read ``simulator.toml``. A missing file means an empty dict (not yet picked)."""
+    if not simulator_toml.exists():
+        return {}
+    data = _read_toml(simulator_toml)
+    _check_version(
+        data, simulator_toml,
+        expected=SIMULATOR_SCHEMA_VERSION,
+        recovery="sim pick",
+    )
+    _require_keys("<simulator.toml root>", data, _ALLOWED_SIMULATOR_TOP)
+    out: dict[str, SimulatorEntry] = {}
+    for label, entry in (data.get("simulators", {}) or {}).items():
+        _require_keys(f"simulators.{label}", entry, _ALLOWED_SIMULATOR)
+        for key in _ALLOWED_SIMULATOR:
+            if key not in entry:
+                raise UserError(
+                    f"{simulator_toml}: [simulators.{label}] missing `{key}`."
+                )
+        out[label] = SimulatorEntry(
+            name=entry["name"], udid=entry["udid"],
+            device=entry["device"], runtime=entry["runtime"],
+        )
+    return out
+
+
+def load(project_toml: Path) -> Config:
+    """Load and validate ``project.toml`` and (optionally) ``simulator.toml``.
+
+    *project_toml* must point at the new split file; legacy ``config.toml``
+    is rejected at discovery time by :func:`paths.find_project_toml`. Each
+    file carries a ``schema_version`` integer; we currently only accept
+    version 1, and unknown versions are a hard UserError so future bumps
+    can carry migration logic without silent misreads.
+    """
+    proj_data = _read_toml(project_toml)
+    _check_version(
+        proj_data, project_toml,
+        expected=PROJECT_SCHEMA_VERSION,
+        recovery="proj init",
+    )
+    _require_keys("<project.toml root>", proj_data, _ALLOWED_PROJECT_TOP)
+
+    if "project" not in proj_data:
+        raise UserError(
+            f"Missing [project] section in {project_toml}. "
+            f"Re-run `worktree-ios-dev-tool proj init --force` to re-seed."
+        )
+    proj = proj_data["project"]
     _require_keys("project", proj, _ALLOWED_PROJECT)
     for key in ("path", "scheme"):
         if key not in proj:
-            raise UserError(f"[project] missing `{key}` in {config_path}.")
-    wt_root = worktree_root(config_path)
+            raise UserError(f"[project] missing `{key}` in {project_toml}.")
+    wt_root = worktree_root(project_toml)
     project = ProjectConfig(
         path=(wt_root / proj["path"]).resolve(),
         scheme=proj["scheme"],
         configuration=proj.get("configuration", "Debug"),
-        simulator_prefix=proj.get("simulator_prefix") or None,
+        simulator_prefix=proj.get("simulator_prefix") or proj["scheme"],
     )
 
-    simulators: dict[str, SimulatorEntry] = {}
-    if "simulator" in data:
-        # Legacy single-sim shape; lifted to label "default" until Task 5
-        # introduces native [simulators.<label>] parsing.
-        sim = data["simulator"]
-        _require_keys("simulator", sim, _ALLOWED_SIMULATOR)
-        for key in _ALLOWED_SIMULATOR:
-            if key not in sim:
-                raise UserError(f"[simulator] missing `{key}` in {config_path}.")
-        simulators["default"] = SimulatorEntry(
-            name=sim["name"],
-            udid=sim["udid"],
-            device=sim["device"],
-            runtime=sim["runtime"],
-        )
-
-    pkg_root_cfg = data.get("packages_root", {"path": "ios/Packages"})
+    pkg_root_cfg = proj_data.get("packages_root", {"path": "ios/Packages"})
     _require_keys("packages_root", pkg_root_cfg, _ALLOWED_PACKAGES_ROOT)
     packages_root = (wt_root / pkg_root_cfg.get("path", "ios/Packages")).resolve()
 
     overrides: dict[str, PackageOverride] = {}
-    for name, table in (data.get("packages", {}) or {}).items():
+    for name, table in (proj_data.get("packages", {}) or {}).items():
         _require_keys(f"packages.{name}", table, _ALLOWED_PACKAGE)
         overrides[name] = PackageOverride(scheme=table.get("scheme"))
 
-    extras = data.get("extras", {})
+    extras = proj_data.get("extras", {})
     _require_keys("extras", extras, _ALLOWED_EXTRAS)
     flags = extras.get("xcodebuild_flags", [])
     if not isinstance(flags, list) or not all(isinstance(f, str) for f in flags):
         raise UserError(
-            f"[extras].xcodebuild_flags must be a list of strings in {config_path}."
+            f"[extras].xcodebuild_flags must be a list of strings in {project_toml}."
         )
 
+    simulators = _load_simulators(simulator_toml_for(project_toml))
+
     return Config(
-        config_path=config_path,
+        config_path=project_toml,
         worktree_root=wt_root,
-        derived_data=derived_data_dir(config_path),
+        derived_data=derived_data_dir(project_toml),
         project=project,
         simulators=simulators,
         packages_root=packages_root,
@@ -186,14 +233,50 @@ def resolve_sim(cfg: Config, label: str | None) -> SimulatorEntry:
         )
 
 
-def write_simulator(config_path: Path, sim: SimulatorEntry) -> None:
-    """Rewrite the [simulator] block in-place using tomlkit to preserve comments."""
-    text = config_path.read_text()
-    doc = tomlkit.parse(text)
-    block = tomlkit.table()
-    block["name"] = sim.name
-    block["udid"] = sim.udid
-    block["device"] = sim.device
-    block["runtime"] = sim.runtime
-    doc["simulator"] = block
-    config_path.write_text(tomlkit.dumps(doc))
+def write_simulators_toml(simulator_toml: Path, simulators: dict[str, SimulatorEntry]) -> None:
+    """Render *simulators* to ``simulator.toml`` (creating the file).
+
+    Uses tomlkit so future hand-edits keep their comments; we still rewrite
+    every key the tool owns. ``schema_version`` is always set to
+    :data:`SIMULATOR_SCHEMA_VERSION`.
+    """
+    doc = tomlkit.document()
+    doc.add(tomlkit.comment("worktree-ios-dev/simulator.toml"))
+    doc.add(tomlkit.comment(
+        "Managed by `worktree-ios-dev-tool sim pick / recreate / remove`. "
+        "Do not hand-edit udid or name."
+    ))
+    doc.add(tomlkit.nl())
+    doc["schema_version"] = SIMULATOR_SCHEMA_VERSION
+
+    if simulators:
+        outer = tomlkit.table(is_super_table=True)
+        for label, entry in simulators.items():
+            inner = tomlkit.table()
+            inner["name"] = entry.name
+            inner["udid"] = entry.udid
+            inner["device"] = entry.device
+            inner["runtime"] = entry.runtime
+            outer[label] = inner
+        doc["simulators"] = outer
+
+    simulator_toml.write_text(tomlkit.dumps(doc))
+
+
+def upsert_simulator_entry(simulator_toml: Path, label: str, entry: SimulatorEntry) -> None:
+    """Insert/replace a single ``[simulators.<label>]`` entry, preserving siblings."""
+    existing = _load_simulators(simulator_toml) if simulator_toml.exists() else {}
+    existing[label] = entry
+    write_simulators_toml(simulator_toml, existing)
+
+
+def remove_simulator_entry(simulator_toml: Path, label: str) -> bool:
+    """Delete the ``[simulators.<label>]`` entry. Returns True if removed, False if absent."""
+    if not simulator_toml.exists():
+        return False
+    existing = _load_simulators(simulator_toml)
+    if label not in existing:
+        return False
+    del existing[label]
+    write_simulators_toml(simulator_toml, existing)
+    return True

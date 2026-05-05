@@ -10,17 +10,17 @@ from pathlib import Path
 
 from . import bootstrap, config as config_mod, packages as packages_mod, simulator as sim_mod, ui, xcodebuild
 from .errors import EnvError, WorktreeIosError
-from .paths import find_config
+from .paths import find_project_toml
 from .proc import run
 
 
 def _add_common(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--config", type=Path, default=None, help="Path to config.toml (overrides walk-up discovery).")
+    parser.add_argument("--config", type=Path, default=None, help="Path to project.toml (overrides walk-up discovery).")
     parser.add_argument("-v", "--verbose", action="store_true", help="Stream subprocess output and show tracebacks.")
 
 
 def _load_config(args: argparse.Namespace) -> config_mod.Config:
-    path = args.config.resolve() if args.config else find_config()
+    path = args.config.resolve() if args.config else find_project_toml()
     return config_mod.load(path)
 
 
