@@ -171,3 +171,53 @@ def cmd_list(args: argparse.Namespace) -> int:
         state = dev.get("state", "?") if dev else "MISSING"
         ui.info(f"{label:<10} {entry.name:<40} {entry.udid}  state={state}")
     return 0
+
+
+def cmd_recreate(args: argparse.Namespace) -> int:
+    """Destroy + re-pick + re-boot the simulator under *label*.
+
+    Always requires an explicit label — destructive operations should not
+    silently default. Removes the simctl device, deletes the entry from
+    ``simulator.toml``, then re-runs the pick flow.
+    """
+    sim_mod.validate_label(args.label)
+    cfg, sim_toml = _load(args)
+
+    existing = cfg.simulators.get(args.label)
+    if existing is not None:
+        dev = sim_mod.find_device_by_udid(existing.udid)
+        if dev is not None:
+            ui.step(f"Deleting {existing.name} ({existing.udid})…")
+            sim_mod.shutdown(existing.udid)
+            sim_mod.delete(existing.udid)
+        remove_simulator_entry(sim_toml, args.label)
+
+    # Reuse cmd_pick by synthesising a fake namespace.
+    pick_args = argparse.Namespace(
+        config=args.config, verbose=args.verbose,
+        label=args.label, all_devices=args.all_devices,
+    )
+    return cmd_pick(pick_args)
+
+
+def cmd_remove(args: argparse.Namespace) -> int:
+    """Remove the entry under *label* from simulator.toml.
+
+    Default: leave the simctl device alone (the user may want to re-register
+    it under a different label). ``--destroy`` shuts down + deletes the
+    device too, matching ``sim recreate``'s teardown half.
+    """
+    sim_mod.validate_label(args.label)
+    cfg, sim_toml = _load(args)
+    entry = cfg.simulators.get(args.label)
+    if entry is None:
+        raise UserError(f"No simulator labeled `{args.label}`.")
+
+    if args.destroy:
+        sim_mod.shutdown(entry.udid)
+        sim_mod.delete(entry.udid)
+        ui.step(f"Deleted simctl device {entry.name} ({entry.udid}).")
+
+    remove_simulator_entry(sim_toml, args.label)
+    ui.done(f"Removed `{args.label}` from simulator.toml.")
+    return 0

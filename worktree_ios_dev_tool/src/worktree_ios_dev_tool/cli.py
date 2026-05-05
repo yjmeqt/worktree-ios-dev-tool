@@ -90,6 +90,24 @@ def build_parser() -> argparse.ArgumentParser:
         "worktree_ios_dev_tool.sim", fromlist=["cmd_list"]
     ).cmd_list(a))
 
+    src = sim_sub.add_parser("recreate", help="Destroy + re-pick the named simulator.")
+    src.add_argument("label", help="Sim label to recreate (required; destructive).")
+    src.add_argument("--all-devices", action="store_true",
+                     help="Disable the iPhone 17 filter when picking.")
+    _add_common(src)
+    src.set_defaults(func=lambda a: __import__(
+        "worktree_ios_dev_tool.sim", fromlist=["cmd_recreate"]
+    ).cmd_recreate(a))
+
+    srm = sim_sub.add_parser("remove", help="Remove a simulator entry from simulator.toml.")
+    srm.add_argument("label", help="Sim label to remove.")
+    srm.add_argument("--destroy", action="store_true",
+                     help="Also delete the simctl device, not just the toml entry.")
+    _add_common(srm)
+    srm.set_defaults(func=lambda a: __import__(
+        "worktree_ios_dev_tool.sim", fromlist=["cmd_remove"]
+    ).cmd_remove(a))
+
     b = sub.add_parser("boot", help="Create (first run) or boot the per-worktree simulator.")
     b.add_argument("--recreate", action="store_true", help="Delete the named sim and re-enter first-run.")
     b.add_argument("--all-devices", action="store_true", help="Disable the iPhone 17 filter in the picker.")
