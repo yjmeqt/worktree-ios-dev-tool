@@ -6,7 +6,7 @@ import plistlib
 from pathlib import Path
 
 from . import simulator as sim_mod, ui, xcodebuild
-from .config import load, require_simulator
+from .config import load, resolve_sim
 from .errors import UserError
 from .paths import find_config
 from .proc import run as proc_run
@@ -41,7 +41,7 @@ def _bundle_id(app_path: Path) -> str:
 def run(args: argparse.Namespace) -> int:
     cfg_path = args.config.resolve() if args.config else find_config()
     cfg = load(cfg_path)
-    sim = require_simulator(cfg)
+    sim = resolve_sim(cfg, label=None)
 
     # 1. Build
     ui.step("Building…")

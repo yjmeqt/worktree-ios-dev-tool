@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .config import Config, require_simulator
+from .config import Config, resolve_sim
 from .errors import UserError
 
 
@@ -29,7 +29,7 @@ def resolve(cfg: Config, package_name: str) -> tuple[list[str], Path]:
     override = cfg.package_overrides.get(package_name)
     scheme = override.scheme if (override and override.scheme) else package_name
 
-    sim = require_simulator(cfg)
+    sim = resolve_sim(cfg, label=None)
     argv = [
         "xcodebuild",
         "test",

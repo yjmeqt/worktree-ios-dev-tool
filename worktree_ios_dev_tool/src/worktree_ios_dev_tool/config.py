@@ -50,12 +50,18 @@ class PackageOverride:
 
 @dataclass(frozen=True)
 class Config:
-    config_path: Path
-    worktree_root: Path
-    derived_data: Path
+    """Resolved view of project.toml + simulator.toml.
+
+    ``simulators`` is keyed by the user-chosen label (default key: ``"default"``).
+    An empty dict means no simulator has been picked yet — commands that need
+    one should raise via :func:`resolve_sim`.
+    """
+    config_path: Path                              # absolute path to project.toml
+    worktree_root: Path                            # parent of worktree-ios-dev/
+    derived_data: Path                             # absolute DerivedData dir
     project: ProjectConfig
-    simulator: SimulatorEntry | None
-    packages_root: Path
+    simulators: dict[str, SimulatorEntry] = field(default_factory=dict)
+    packages_root: Path = field(default=Path("."))
     package_overrides: dict[str, PackageOverride] = field(default_factory=dict)
     extras_xcodebuild_flags: list[str] = field(default_factory=list)
 
@@ -102,14 +108,16 @@ def load(config_path: Path) -> Config:
         simulator_prefix=proj.get("simulator_prefix") or None,
     )
 
-    simulator: SimulatorEntry | None = None
+    simulators: dict[str, SimulatorEntry] = {}
     if "simulator" in data:
+        # Legacy single-sim shape; lifted to label "default" until Task 5
+        # introduces native [simulators.<label>] parsing.
         sim = data["simulator"]
         _require_keys("simulator", sim, _ALLOWED_SIMULATOR)
         for key in _ALLOWED_SIMULATOR:
             if key not in sim:
                 raise UserError(f"[simulator] missing `{key}` in {config_path}.")
-        simulator = SimulatorEntry(
+        simulators["default"] = SimulatorEntry(
             name=sim["name"],
             udid=sim["udid"],
             device=sim["device"],
@@ -138,20 +146,44 @@ def load(config_path: Path) -> Config:
         worktree_root=wt_root,
         derived_data=derived_data_dir(config_path),
         project=project,
-        simulator=simulator,
+        simulators=simulators,
         packages_root=packages_root,
         package_overrides=overrides,
         extras_xcodebuild_flags=list(flags),
     )
 
 
-def require_simulator(cfg: Config) -> SimulatorEntry:
-    if cfg.simulator is None:
+def resolve_sim(cfg: Config, label: str | None) -> SimulatorEntry:
+    """Pick the simulator a command should target.
+
+    Resolution rules:
+      * No simulators configured: raise UserError pointing at ``sim pick``.
+      * ``label`` omitted and exactly one configured: return that one.
+      * ``label`` omitted and multiple configured: raise UserError listing
+        the available labels — destructive ambiguity is never silent.
+      * ``label`` present but unknown: raise UserError listing what's available.
+      * ``label`` present and known: return that entry.
+    """
+    if not cfg.simulators:
         raise UserError(
-            "No [simulator] block in config.toml. "
-            "Run `worktree-ios-dev-tool boot` first to create and register a simulator."
+            "No simulators configured. Run `worktree-ios-dev-tool sim pick` first."
         )
-    return cfg.simulator
+    if label is None:
+        if len(cfg.simulators) == 1:
+            (only,) = cfg.simulators.values()
+            return only
+        labels = ", ".join(sorted(cfg.simulators))
+        raise UserError(
+            f"Multiple simulators configured ({labels}). "
+            f"Pass `--sim <label>` to disambiguate."
+        )
+    try:
+        return cfg.simulators[label]
+    except KeyError:
+        labels = ", ".join(sorted(cfg.simulators))
+        raise UserError(
+            f"No simulator labeled `{label}`. Configured: {labels}."
+        )
 
 
 def write_simulator(config_path: Path, sim: SimulatorEntry) -> None:

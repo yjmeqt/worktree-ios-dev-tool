@@ -16,22 +16,23 @@ def run(args: argparse.Namespace) -> int:
 
     sim_mod.ensure_tooling()
 
+    existing = cfg.simulators.get("default")
     need_first_run = (
-        cfg.simulator is None
-        or sim_mod.find_device_by_udid(cfg.simulator.udid) is None
+        existing is None
+        or sim_mod.find_device_by_udid(existing.udid) is None
         or args.recreate
     )
 
-    if args.recreate and cfg.simulator is not None:
-        existing = sim_mod.find_device_by_udid(cfg.simulator.udid)
-        if existing is not None:
-            ui.step(f"Deleting {cfg.simulator.name} ({cfg.simulator.udid})…")
-            sim_mod.delete(cfg.simulator.udid)
+    if args.recreate and existing is not None:
+        dev = sim_mod.find_device_by_udid(existing.udid)
+        if dev is not None:
+            ui.step(f"Deleting {existing.name} ({existing.udid})…")
+            sim_mod.delete(existing.udid)
 
     if not need_first_run:
-        assert cfg.simulator is not None
-        sim_mod.boot(cfg.simulator.udid)
-        ui.done(f"Booted {cfg.simulator.name} ({cfg.simulator.udid}).")
+        assert existing is not None
+        sim_mod.boot(existing.udid)
+        ui.done(f"Booted {existing.name} ({existing.udid}).")
         return 0
 
     # First run: pick + create + persist + boot.

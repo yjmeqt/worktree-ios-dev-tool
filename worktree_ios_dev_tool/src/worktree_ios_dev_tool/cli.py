@@ -96,11 +96,10 @@ def _cmd_config(args: argparse.Namespace) -> int:
             "configuration": cfg.project.configuration,
             "simulator_prefix": cfg.project.simulator_prefix,
         },
-        "simulator": None if cfg.simulator is None else {
-            "name": cfg.simulator.name,
-            "udid": cfg.simulator.udid,
-            "device": cfg.simulator.device,
-            "runtime": cfg.simulator.runtime,
+        "simulators": {
+            label: {
+                "name": s.name, "udid": s.udid, "device": s.device, "runtime": s.runtime,
+            } for label, s in cfg.simulators.items()
         },
         "packages_root": str(cfg.packages_root),
         "package_overrides": {k: {"scheme": v.scheme} for k, v in cfg.package_overrides.items()},
@@ -215,17 +214,18 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         else:
             ui.step(f"project        {cfg.project.path}")
 
-        if cfg.simulator is None:
-            ui.problem("simulator      no [simulator] block — run `worktree-ios-dev-tool boot`")
-            problems.append("No [simulator] block. Run `worktree-ios-dev-tool boot`.")
+        if not cfg.simulators:
+            ui.problem("simulators     none configured — run `worktree-ios-dev-tool boot`")
+            problems.append("No simulators. Run `worktree-ios-dev-tool boot`.")
         else:
-            dev = sim_mod.find_device_by_udid(cfg.simulator.udid)
-            if dev is None:
-                ui.problem(f"simulator      UDID not found: {cfg.simulator.udid}")
-                problems.append(f"Simulator UDID not found in simctl list: {cfg.simulator.udid}")
-            else:
-                state = dev.get("state", "?")
-                ui.step(f"simulator      {cfg.simulator.name} ({cfg.simulator.udid})  state={state}")
+            for label, sim in cfg.simulators.items():
+                dev = sim_mod.find_device_by_udid(sim.udid)
+                if dev is None:
+                    ui.problem(f"simulators[{label}]  UDID not found: {sim.udid}")
+                    problems.append(f"Simulator UDID not found: {sim.udid}")
+                else:
+                    state = dev.get("state", "?")
+                    ui.step(f"simulators[{label}]  {sim.name} ({sim.udid})  state={state}")
 
         if not cfg.derived_data.parent.exists():
             ui.problem(f"worktree-ios-dev/  missing: {cfg.derived_data.parent}")

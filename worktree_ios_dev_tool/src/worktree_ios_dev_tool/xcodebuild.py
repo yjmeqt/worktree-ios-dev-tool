@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from .config import Config, SimulatorEntry, require_simulator
+from .config import Config, SimulatorEntry, resolve_sim
 
 
 def _destination(sim: SimulatorEntry) -> str:
@@ -26,7 +26,7 @@ def _common(cfg: Config, sim: SimulatorEntry | None, *, release: bool) -> list[s
 
 
 def build_argv(cfg: Config, *, release: bool = False, scheme_override: str | None = None) -> list[str]:
-    sim = require_simulator(cfg)
+    sim = resolve_sim(cfg, label=None)
     argv = _common(cfg, sim, release=release)
     if scheme_override:
         argv[argv.index("-scheme") + 1] = scheme_override
@@ -41,7 +41,7 @@ def test_argv(
     only_testing: Sequence[str] = (),
     skip_testing: Sequence[str] = (),
 ) -> list[str]:
-    sim = require_simulator(cfg)
+    sim = resolve_sim(cfg, label=None)
     argv = _common(cfg, sim, release=release) + ["test"]
     if scheme_override:
         argv[argv.index("-scheme") + 1] = scheme_override
