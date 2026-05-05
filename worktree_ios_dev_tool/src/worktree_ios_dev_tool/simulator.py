@@ -29,6 +29,53 @@ class Runtime:
 
 
 _IPHONE17_RE = re.compile(r"iPhone 17(\b| )")
+_LABEL_RE = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def validate_label(label: str) -> None:
+    """Reject labels that would break the reverse-parser.
+
+    Labels must be non-empty and match ``[A-Za-z0-9_]+``. Hyphens are
+    explicitly disallowed because the reverse-parser relies on the *last*
+    hyphen to split ``<basename>-<label>``; a label containing a hyphen
+    would corrupt that split when the basename also has hyphens.
+    """
+    if not label or not _LABEL_RE.match(label):
+        raise UserError(
+            f"Invalid simulator label `{label}`. Use alphanumerics and underscores only."
+        )
+
+
+def synth_managed_name(prefix: str, worktree_basename: str, label: str) -> str:
+    """Build a simctl device name in the canonical managed format.
+
+    Format: ``<simulator_prefix>-<worktree_basename>-<label>``. The prefix
+    and basename may contain hyphens; only the trailing ``-<label>`` segment
+    is reverse-parsed by :func:`parse_managed_name`.
+    """
+    return f"{prefix}-{worktree_basename}-{label}"
+
+
+def parse_managed_name(name: str, *, prefix: str) -> tuple[str, str] | None:
+    """Reverse the :func:`synth_managed_name` format.
+
+    Returns ``(worktree_basename, label)`` if *name* matches the managed
+    format under *prefix*, else ``None`` (so callers can ignore non-managed
+    sims). The basename may contain hyphens; the label, by validation, may
+    not — so we split on the *last* hyphen only.
+
+    Empty basename ("Pulse-default" with prefix="Pulse" — no separator
+    between basename and label) returns None: ambiguous, leave alone.
+    """
+    if not name.startswith(prefix + "-"):
+        return None
+    tail = name[len(prefix) + 1 :]
+    if "-" not in tail:
+        return None
+    basename, _, label = tail.rpartition("-")
+    if not basename or not label:
+        return None
+    return basename, label
 
 
 def ensure_tooling() -> None:
