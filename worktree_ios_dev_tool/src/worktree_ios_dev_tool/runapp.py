@@ -46,7 +46,7 @@ def run(args: argparse.Namespace) -> int:
     # 1. Build
     ui.step("Building…")
     argv = xcodebuild.build_argv(cfg, release=args.release, sim_label=getattr(args, "sim", None))
-    proc_run(argv, verbose=args.verbose)
+    proc_run(argv, verbose=args.verbose, quiet=not args.verbose)
 
     # 2. Locate .app
     configuration = "Release" if args.release else cfg.project.configuration

@@ -18,7 +18,7 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
         "--project-toml", dest="config", type=Path, default=None,
         help="Path to project.toml (overrides walk-up discovery). simulator.toml is resolved alongside it.",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Stream subprocess output and show tracebacks.")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show full xcodebuild output (no --quiet) and Python tracebacks.")
 
 
 def _load_config(args: argparse.Namespace) -> config_mod.Config:
@@ -179,7 +179,7 @@ def _cmd_clean(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     ui.step("Cleaning…")
     argv = xcodebuild.clean_argv(cfg)
-    run(argv, verbose=args.verbose)
+    run(argv, verbose=args.verbose, quiet=not args.verbose)
     ui.done("Clean succeeded.")
     return 0
 
@@ -209,7 +209,7 @@ def _cmd_build(args: argparse.Namespace) -> int:
     argv = xcodebuild.build_argv(
         cfg, release=args.release, scheme_override=args.scheme, sim_label=args.sim,
     )
-    run(argv, verbose=args.verbose)
+    run(argv, verbose=args.verbose, quiet=not args.verbose)
     ui.done("Build succeeded.")
     return 0
 
@@ -224,7 +224,7 @@ def _cmd_test(args: argparse.Namespace) -> int:
         only_testing=args.only_testing, skip_testing=args.skip_testing,
         sim_label=args.sim,
     )
-    run(argv, verbose=args.verbose)
+    run(argv, verbose=args.verbose, quiet=not args.verbose)
     ui.done("Tests passed.")
     return 0
 
@@ -238,7 +238,7 @@ def _cmd_test_package(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     ui.step(f"Testing package {args.name}…")
     argv, cwd = packages_mod.resolve(cfg, args.name, sim_label=args.sim)
-    run(argv, cwd=cwd, verbose=args.verbose)
+    run(argv, cwd=cwd, verbose=args.verbose, quiet=not args.verbose)
     ui.done(f"Tests passed — {args.name}.")
     return 0
 

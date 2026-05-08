@@ -22,11 +22,15 @@ def _run_xcodebuild_pretty(
     argv: Sequence[str],
     *,
     cwd: Path | None,
+    quiet: bool = True,
 ) -> int:
     """Run `xcodebuild` with its merged stdout/stderr piped through `mint run xcbeautify`.
     Returns xcodebuild's exit code (xcbeautify's is ignored — pipefail semantics)."""
+    xcbeautify_argv = ["mint", "run", "xcbeautify"]
+    if quiet:
+        xcbeautify_argv.append("--quiet")
     xcb = subprocess.Popen(
-        ["mint", "run", "xcbeautify"],
+        xcbeautify_argv,
         stdin=subprocess.PIPE,
     )
     try:
@@ -51,6 +55,7 @@ def run(
     cwd: Path | None = None,
     capture: bool = False,
     verbose: bool = False,
+    quiet: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run argv. If capture=False, stdout/stderr stream to the parent tty.
     When argv invokes `xcodebuild` and output is not captured, the merged
@@ -68,7 +73,7 @@ def run(
     )
 
     if use_pretty:
-        returncode = _run_xcodebuild_pretty(argv, cwd=cwd)
+        returncode = _run_xcodebuild_pretty(argv, cwd=cwd, quiet=quiet)
         if returncode != 0:
             raise SubprocessError(
                 f"xcodebuild failed with exit code {returncode}",
