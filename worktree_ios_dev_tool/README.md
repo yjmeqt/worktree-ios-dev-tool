@@ -7,19 +7,19 @@ Per-worktree iOS build / simulator / test CLI. Each git worktree gets its own si
 Once per machine, from GitHub:
 
 ```bash
-uv tool install "git+https://github.com/yi-jiang-applovin/pulse-dev-skills.git#subdirectory=worktree_ios_dev_tool"
+uv tool install "git+https://github.com/yjmeqt/worktree-ios-dev-tool.git#subdirectory=worktree_ios_dev_tool"
 ```
 
 Upgrade to the latest `main` (`uv upgrade` caches the resolved commit — use `--reinstall`):
 
 ```bash
-uv tool install --reinstall "git+https://github.com/yi-jiang-applovin/pulse-dev-skills.git#subdirectory=worktree_ios_dev_tool"
+uv tool install --reinstall "git+https://github.com/yjmeqt/worktree-ios-dev-tool.git#subdirectory=worktree_ios_dev_tool"
 ```
 
 Local development (editable, picks up source edits automatically):
 
 ```bash
-uv tool install --editable /abs/path/to/pulse-dev-skills/worktree_ios_dev_tool
+uv tool install --editable /abs/path/to/worktree-ios-dev-tool/worktree_ios_dev_tool
 ```
 
 Requires `uv` and `~/.local/bin` on `PATH`. Optional: `brew install mint` enables `xcbeautify` for prettier build output.
