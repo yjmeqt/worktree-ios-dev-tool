@@ -27,7 +27,3 @@ npx skills add yjmeqt/worktree-ios-dev-tool
 ```
 
 This populates `.claude/skills/worktree-ios-dev/` (and `.agents/skills/worktree-ios-dev/`) via symlinks into the local skills cache. Run `npx skills update` after pushing skill edits.
-
-## History
-
-Extracted from [`yi-jiang-applovin/pulse-dev-skills`](https://github.com/yi-jiang-applovin/pulse-dev-skills) on 2026-05-11 with `git filter-repo` so per-commit history is preserved for the extracted paths.
