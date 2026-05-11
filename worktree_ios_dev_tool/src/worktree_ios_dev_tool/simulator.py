@@ -182,20 +182,49 @@ def _pick_fuzzy(prompt: str, options: list[str]) -> str:
             print(f"Enter a number 1..{len(options)}.")
 
 
-def pick_device_and_runtime(*, iphone_17_only: bool) -> tuple[DeviceType, Runtime]:
+def pick_device_and_runtime(
+    *, iphone_17_only: bool, device_name: str | None = None, runtime_name: str | None = None,
+) -> tuple[DeviceType, Runtime]:
     devices = list_device_types(iphone_17_only=iphone_17_only)
     if not devices:
         raise EnvError(
             "No matching iPhone device types found. "
-            "Try `worktree-ios-dev-tool boot --all-devices`."
+            "Try `worktree-ios-dev-tool sim pick --all-devices`."
         )
     runtimes = list_runtimes()
     if not runtimes:
         raise EnvError("No iOS runtimes installed. Install via Xcode > Settings > Platforms.")
-    device_name = _pick_fuzzy("Select device type:", [d.name for d in devices])
-    runtime_name = _pick_fuzzy("Select runtime:", [r.name for r in runtimes])
-    device = next(d for d in devices if d.name == device_name)
-    runtime = next(r for r in runtimes if r.name == runtime_name)
+
+    if device_name:
+        matches = [d for d in devices if d.name == device_name]
+        if not matches:
+            raise UserError(
+                f"Device type `{device_name}` not found. "
+                f"Available: {', '.join(d.name for d in devices)}"
+            )
+        device = matches[0]
+    elif _is_interactive():
+        device_name = _pick_fuzzy("Select device type:", [d.name for d in devices])
+        device = next(d for d in devices if d.name == device_name)
+    else:
+        device = devices[0]
+        ui.info(f"Auto-selected device: {device.name}")
+
+    if runtime_name:
+        matches = [r for r in runtimes if r.name == runtime_name]
+        if not matches:
+            raise UserError(
+                f"Runtime `{runtime_name}` not found. "
+                f"Available: {', '.join(r.name for r in runtimes)}"
+            )
+        runtime = matches[0]
+    elif _is_interactive():
+        runtime_name = _pick_fuzzy("Select runtime:", [r.name for r in runtimes])
+        runtime = next(r for r in runtimes if r.name == runtime_name)
+    else:
+        runtime = runtimes[0]
+        ui.info(f"Auto-selected runtime: {runtime.name}")
+
     return device, runtime
 
 

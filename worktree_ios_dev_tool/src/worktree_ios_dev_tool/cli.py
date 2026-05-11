@@ -58,11 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
     sim_p = sub.add_parser("sim", help="Simulator lifecycle: pick / boot / shutdown / list / ...")
     sim_sub = sim_p.add_subparsers(dest="sim_verb", required=True)
 
-    spk = sim_sub.add_parser("pick", help="Interactively pick + create a simulator.")
+    spk = sim_sub.add_parser("pick", help="Pick + create a simulator (interactive) or auto-select (non-TTY).")
     spk.add_argument("label", nargs="?", default=None,
                      help="Label under which to register the sim. Defaults to `default`.")
     spk.add_argument("--all-devices", action="store_true",
                      help="Disable the iPhone 17 filter when picking.")
+    spk.add_argument("--device", default=None, help="Device type name (e.g. 'iPhone 17 Pro').")
+    spk.add_argument("--runtime", default=None, help="Runtime name (e.g. 'iOS 26.2').")
     _add_common(spk)
     spk.set_defaults(func=lambda a: __import__(
         "worktree_ios_dev_tool.sim", fromlist=["cmd_pick"]
@@ -97,6 +99,8 @@ def build_parser() -> argparse.ArgumentParser:
     src.add_argument("label", help="Sim label to recreate (required; destructive).")
     src.add_argument("--all-devices", action="store_true",
                      help="Disable the iPhone 17 filter when picking.")
+    src.add_argument("--device", default=None, help="Device type name (e.g. 'iPhone 17 Pro').")
+    src.add_argument("--runtime", default=None, help="Runtime name (e.g. 'iOS 26.2').")
     _add_common(src)
     src.set_defaults(func=lambda a: __import__(
         "worktree_ios_dev_tool.sim", fromlist=["cmd_recreate"]

@@ -66,7 +66,11 @@ def cmd_pick(args: argparse.Namespace) -> int:
 
     sim_mod.ensure_tooling()
 
-    device, runtime = sim_mod.pick_device_and_runtime(iphone_17_only=not args.all_devices)
+    device, runtime = sim_mod.pick_device_and_runtime(
+        iphone_17_only=not args.all_devices,
+        device_name=args.device,
+        runtime_name=args.runtime,
+    )
     name = sim_mod.synth_managed_name(
         cfg.project.simulator_prefix, cfg.worktree_root.name, label,
     )
@@ -196,6 +200,7 @@ def cmd_recreate(args: argparse.Namespace) -> int:
     pick_args = argparse.Namespace(
         config=args.config, verbose=args.verbose,
         label=args.label, all_devices=args.all_devices,
+        device=args.device, runtime=args.runtime,
     )
     return cmd_pick(pick_args)
 
